@@ -1,0 +1,33 @@
+The reason your Chrome extension UI (#floating-selector-panel) is covered by the overlay is due to the Top Layer mechanism in modern browsers, specifically how <dialog> elements work when opened via .showModal().
+
+The Cause: The "Top Layer"
+When a <dialog> is opened using the showModal() method (which is clearly the case here as evidenced by the ::backdrop), the browser moves that dialog and its ::backdrop pseudo-element into a special internal stack called the Top Layer.
+
+Hierarchy over Z-Index: Elements in the Top Layer are rendered in a separate stack that sits above all other elements in the standard document flow, regardless of their z-index.
+The Max Z-Index Limitation: Even though your panel has a z-index of 2147483647 (the maximum 32-bit integer value), it still resides in the standard stacking context of the <body>. The ::backdrop of a modal dialog is in the Top Layer, which is logically "higher" than the highest possible z-index in the normal DOM.
+Interaction Blocking: The ::backdrop is designed specifically to prevent interaction with elements behind it (including your extension's UI) to maintain the "modal" focus of the dialog.
+Technical Details for your Developers
+Inspected Element: dialog::backdrop (UID 606).
+Panel Style: position: fixed; z-index: 2147483647;.
+Conflict: The dialog (UID 603) is a modal. Modal dialogs and their backdrops are rendered in the Top Layer.
+Platform Behavior: According to the HTML specification, the Top Layer is the final layer painted, appearing in front of all other content.
+Solutions to Ensure Visibility
+To make sure your Chrome Plugin stays visible and interactable, you have two primary options:
+
+1. Move the Plugin UI to the Top Layer (Recommended)
+If your plugin UI is also a <dialog> or uses the Popover API (available in modern Chrome), you can move it into the Top Layer as well.
+
+Action: Change #floating-selector-panel to a <dialog> and call panel.showModal().
+Benefit: If multiple elements are in the Top Layer, the one most recently added (or the one with the higher relative z-index within the Top Layer, though rarely needed) will be on top.
+2. Use a Shadow DOM in a separate Context (If applicable)
+If you are injecting this via a Content Script, ensure you are not being restricted by the host page's stacking context. However, the Top Layer will still likely cover it unless the injection method uses a more privileged UI layer (like chrome.sidePanel or a separate window).
+
+3. Shadow DOM + Popover API
+You can add the popover attribute to your panel and call showPopover().
+
+
+Javascript Code:
+// Example fix for the developer
+const panel = document.getElementById('floating-selector-panel');
+panel.setAttribute('popover', 'manual'); 
+panel.showPopover(); // This forces it into the Top Layer
