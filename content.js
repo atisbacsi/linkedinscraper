@@ -39,6 +39,12 @@
   status.style.fontSize = '12px';
   panel.appendChild(status);
 
+  const lastUpdated = document.createElement('div');
+  lastUpdated.textContent = 'Utolso frissites: -';
+  lastUpdated.style.color = '#94a3b8';
+  lastUpdated.style.fontSize = '12px';
+  panel.appendChild(lastUpdated);
+
   const shortcuts = document.createElement('div');
   shortcuts.textContent = 'Ctrl+Alt+1..7 mezovalsztas, Ctrl+Alt+0 panel eloterbe';
   shortcuts.style.color = '#94a3b8';
@@ -57,6 +63,7 @@
   let activeField = null;
   let hoveredElement = null;
   let promoteTimer = null;
+  const profileLastUpdatedKey = 'LastUpdatedAt';
   const experienceFieldLabel = 'Add Experience';
   const experienceStorageKey = 'Experiences';
   const fieldLabels = [
@@ -113,6 +120,23 @@
     status.textContent = message;
   }
 
+  function formatLastUpdated(timestamp) {
+    if (!timestamp) {
+      return '-';
+    }
+
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) {
+      return '-';
+    }
+
+    return date.toLocaleString();
+  }
+
+  function setLastUpdatedDisplay(timestamp) {
+    lastUpdated.textContent = `Utolso frissites: ${formatLastUpdated(timestamp)}`;
+  }
+
   function clearHoveredElement() {
     if (hoveredElement) {
       hoveredElement.classList.remove('floating-selector-hover');
@@ -148,7 +172,7 @@
 
     chrome.storage.local.get([profileUrl], (result) => {
       const existingProfileData = result[profileUrl] || {};
-      const updatedProfileData =
+      const updatedProfileDataBase =
         fieldName === experienceFieldLabel
           ? {
               ...existingProfileData,
@@ -163,6 +187,10 @@
               ...existingProfileData,
               [fieldName]: value,
             };
+      const updatedProfileData = {
+        ...updatedProfileDataBase,
+        [profileLastUpdatedKey]: new Date().toISOString(),
+      };
 
       chrome.storage.local.set({ [profileUrl]: updatedProfileData }, () => {
         if (chrome.runtime.lastError) {
@@ -177,6 +205,7 @@
         setStatus(
           fieldName === experienceFieldLabel ? 'Tapasztalat hozzaadva' : `${fieldName} elmentve`
         );
+        setLastUpdatedDisplay(updatedProfileData[profileLastUpdatedKey]);
         if (fieldName === experienceFieldLabel) {
           const experienceCount = Array.isArray(updatedProfileData[experienceStorageKey])
             ? updatedProfileData[experienceStorageKey].length
@@ -288,6 +317,7 @@
               : value !== undefined && value !== null && value !== '';
           markButtonAsSaved(label, hasSavedData, experienceCount);
         });
+        setLastUpdatedDisplay(data[profileLastUpdatedKey]);
       });
     }
 
