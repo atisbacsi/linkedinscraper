@@ -173,7 +173,33 @@
     });
   }
 
-  function createButton(label) {
+  function exportStorageAsJson() {
+    chrome.storage.local.get(null, (storedData) => {
+      if (chrome.runtime.lastError) {
+        console.error('Storage export failed:', chrome.runtime.lastError.message);
+        setStatus('Export sikertelen');
+        return;
+      }
+
+      const json = JSON.stringify(storedData, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const timestamp = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-');
+
+      link.href = downloadUrl;
+      link.download = `linkedin-profiles-${timestamp}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+
+      console.log('Exported storage data:', storedData);
+      setStatus('JSON export kesz');
+    });
+  }
+
+  function createButton(label, clickHandler) {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = label;
@@ -190,14 +216,25 @@
     button.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
+      if (clickHandler) {
+        clickHandler();
+        return;
+      }
+
       startSelectionMode(label);
     });
     return button;
   }
 
+  function createExportButton() {
+    return createButton('Export JSON', exportStorageAsJson);
+  }
+
   fieldLabels.forEach((label) => {
     panel.appendChild(createButton(label));
   });
+
+  panel.appendChild(createExportButton());
 
   document.body.appendChild(panel);
 
