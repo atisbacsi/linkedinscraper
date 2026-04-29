@@ -63,6 +63,7 @@
   let activeField = null;
   let hoveredElement = null;
   let promoteTimer = null;
+  let lastSyncedProfileUrl = '';
   const profileLastUpdatedKey = 'LastUpdatedAt';
   const experienceFieldLabel = 'Add Experience';
   const experienceStorageKey = 'Experiences';
@@ -363,6 +364,16 @@
       });
     }
 
+    function refreshPanelForCurrentProfile(force) {
+      const profileUrl = getStorageProfileUrl();
+      if (!force && profileUrl === lastSyncedProfileUrl) {
+        return;
+      }
+
+      lastSyncedProfileUrl = profileUrl;
+      refreshButtonStates();
+    }
+
     fieldLabels.forEach((label) => {
       const btn = createButton(label);
       buttonMap[label] = btn;
@@ -377,7 +388,7 @@
 
   document.body.appendChild(panel);
 
-    refreshButtonStates();
+    refreshPanelForCurrentProfile(true);
 
   if (supportsPopover()) {
     panel.setAttribute('popover', 'manual');
@@ -400,6 +411,7 @@
 
     if (shouldPromote) {
       schedulePanelPromotion();
+      refreshPanelForCurrentProfile(false);
     }
   });
 
@@ -490,4 +502,7 @@
   globalThis.addEventListener('keydown', handleKeydown, true);
   globalThis.addEventListener('keyup', handleKeyup, true);
   globalThis.addEventListener('blur', () => setHotkeyHintsVisible(false));
+  globalThis.addEventListener('popstate', () => refreshPanelForCurrentProfile(true));
+  globalThis.addEventListener('focus', () => refreshPanelForCurrentProfile(true));
+  globalThis.setInterval(() => refreshPanelForCurrentProfile(false), 700);
 })();
