@@ -19,7 +19,7 @@ It injects a small control panel on the right side of LinkedIn pages. From there
 
 The extension currently supports these fields:
 
-- `Név`
+- `Name`
 - `Headline`
 - `Info`
 - `Location`
@@ -47,7 +47,7 @@ the extension stores the data under:
 
 The extension also supports keyboard shortcuts:
 
-- `Ctrl + Alt + 1` → `Név`
+- `Ctrl + Alt + 1` → `Name`
 - `Ctrl + Alt + 2` → `Headline`
 - `Ctrl + Alt + 3` → `Info`
 - `Ctrl + Alt + 4` → `Location`
@@ -68,7 +68,7 @@ Example:
 ```json
 {
   "https://www.linkedin.com/in/example/": {
-    "Név": "Example Name",
+    "Name": "Example Name",
     "Headline": "Software Engineer",
     "Location": "Berlin, Germany",
     "Contact": "example@example.com",

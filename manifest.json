@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Floating Selector Panel",
+  "name": "Linkedin Handy Scraper Panel",
   "version": "1.0.0",
-  "description": "Floating panel for selecting page elements and logging their text.",
+  "description": "Chrome extension for LinkedIn that provides a floating panel to easily select and scrape page elements with instant text logging.",
   "permissions": ["storage"],
   "content_scripts": [
     {

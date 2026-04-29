@@ -59,9 +59,9 @@
   let promoteTimer = null;
   const experienceFieldLabel = 'Add Experience';
   const experienceStorageKey = 'Experiences';
-  const fieldLabels = ['Név', 'Headline', 'Info', 'Location', 'Contact', 'NumOfContacts', experienceFieldLabel];
+  const fieldLabels = ['Name', 'Headline', 'Info', 'Location', 'Contact', 'NumOfContacts', experienceFieldLabel];
   const fieldKeyMap = {
-    Digit1: 'Név',
+    Digit1: 'Name',
     Digit2: 'Headline',
     Digit3: 'Info',
     Digit4: 'Location',

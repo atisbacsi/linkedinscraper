@@ -1,0 +1,324 @@
+openapi: 3.1.0
+
+info:
+  title: LinkedIn Scraper Backend
+  version: 1.0.0
+  description: >
+    Backend storage service for the LinkedIn Scraper Chrome extension.
+    Mirrors the chrome.storage.local data model: profile data is keyed by
+    the canonical LinkedIn profile URL, and individual fields are saved
+    as discrete fragments as the user selects them.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: profiles
+    description: Per-profile data operations
+  - name: export
+    description: Full dataset export
+
+paths:
+
+  /profiles:
+    get:
+      operationId: listProfiles
+      summary: List all stored profiles
+      tags: [profiles]
+      responses:
+        "200":
+          description: Map of all profile URLs to their stored data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AllProfiles"
+              example:
+                "https://www.linkedin.com/in/example/":
+                  Name: "Example Name"
+                  Headline: "Software Engineer"
+                  Location: "Berlin, Germany"
+                  Contact: "example@example.com"
+                  NumOfContacts: "500+"
+                  Experiences:
+                    - "Senior Engineer at Acme Corp (2020–present)"
+                    - "Engineer at Widget Ltd (2017–2020)"
+
+  /profiles/{profileUrl}:
+    parameters:
+      - $ref: "#/components/parameters/profileUrl"
+
+    get:
+      operationId: getProfile
+      summary: Get all stored data for a profile
+      tags: [profiles]
+      responses:
+        "200":
+          description: Profile data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileData"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteProfile
+      summary: Delete all stored data for a profile
+      tags: [profiles]
+      responses:
+        "204":
+          description: Profile data deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /profiles/{profileUrl}/fields/{fieldName}:
+    parameters:
+      - $ref: "#/components/parameters/profileUrl"
+      - name: fieldName
+        in: path
+        required: true
+        description: >
+          One of the scalar field names: Name, Headline, Info, Location,
+          Contact, NumOfContacts.
+        schema:
+          $ref: "#/components/schemas/ScalarFieldName"
+
+    put:
+      operationId: saveField
+      summary: Save or overwrite a scalar field for a profile
+      description: >
+        Stores a single text value for the given field under the profile URL.
+        If the profile does not exist yet, it is created.
+        This endpoint is called by the extension each time the user clicks
+        an element in selection mode (for non-Experience fields).
+      tags: [profiles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FieldValue"
+            example:
+              value: "Software Engineer at Acme Corp"
+      responses:
+        "200":
+          description: Field saved; returns the updated profile data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileData"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+    delete:
+      operationId: deleteField
+      summary: Remove a scalar field from a profile
+      tags: [profiles]
+      responses:
+        "200":
+          description: Field removed; returns the updated profile data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileData"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /profiles/{profileUrl}/experiences:
+    parameters:
+      - $ref: "#/components/parameters/profileUrl"
+
+    post:
+      operationId: addExperience
+      summary: Append an experience entry for a profile
+      description: >
+        Appends a new entry to the Experiences array for the given profile.
+        If the profile does not exist yet, it is created.
+        This endpoint is called by the extension when the user selects
+        an element while "Add Experience" mode is active.
+      tags: [profiles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FieldValue"
+            example:
+              value: "Senior Engineer at Acme Corp · 3 yrs\nFull-time · Berlin, Germany"
+      responses:
+        "200":
+          description: Experience appended; returns the updated profile data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileData"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+    delete:
+      operationId: clearExperiences
+      summary: Remove all experience entries for a profile
+      tags: [profiles]
+      responses:
+        "200":
+          description: Experiences cleared; returns the updated profile data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileData"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /profiles/{profileUrl}/experiences/{index}:
+    parameters:
+      - $ref: "#/components/parameters/profileUrl"
+      - name: index
+        in: path
+        required: true
+        description: Zero-based index of the experience entry to remove.
+        schema:
+          type: integer
+          minimum: 0
+
+    delete:
+      operationId: deleteExperience
+      summary: Remove a single experience entry by index
+      tags: [profiles]
+      responses:
+        "200":
+          description: Entry removed; returns the updated profile data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileData"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /export:
+    get:
+      operationId: exportJson
+      summary: Export the full dataset as a downloadable JSON file
+      description: >
+        Returns the complete contents of the store as a JSON file download.
+        Equivalent to the "Export JSON" button in the extension panel.
+      tags: [export]
+      responses:
+        "200":
+          description: Full dataset as a JSON file attachment
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              example: 'attachment; filename="linkedin-profiles-2026-04-29T12-00-00-000Z.json"'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AllProfiles"
+
+components:
+
+  parameters:
+    profileUrl:
+      name: profileUrl
+      in: path
+      required: true
+      description: >
+        The canonical LinkedIn profile URL, URL-encoded.
+        Contact overlay URLs are normalised to the base profile URL before
+        storage (i.e. the `/overlay/contact-info/` suffix is stripped).
+      schema:
+        type: string
+        format: uri
+      example: "https%3A%2F%2Fwww.linkedin.com%2Fin%2Fexample%2F"
+
+  schemas:
+
+    ScalarFieldName:
+      type: string
+      enum:
+        - Name
+        - Headline
+        - Info
+        - Location
+        - Contact
+        - NumOfContacts
+      description: The set of single-value fields supported by the extension.
+
+    FieldValue:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: string
+          description: The innerText of the selected element, trimmed.
+          minLength: 1
+
+    ProfileData:
+      type: object
+      description: >
+        All stored data for a single LinkedIn profile.
+        Every property is optional because the user may have only partially
+        filled the profile so far.
+      properties:
+        Name:
+          type: string
+        Headline:
+          type: string
+        Info:
+          type: string
+        Location:
+          type: string
+        Contact:
+          type: string
+        NumOfContacts:
+          type: string
+        Experiences:
+          type: array
+          items:
+            type: string
+          description: Ordered list of experience block texts, as appended by the user.
+      example:
+        Name: "Example Name"
+        Headline: "Software Engineer"
+        Info: "Passionate about building great products."
+        Location: "Berlin, Germany"
+        Contact: "example@example.com"
+        NumOfContacts: "500+"
+        Experiences:
+          - "Senior Engineer at Acme Corp · 3 yrs\nFull-time · Berlin, Germany"
+          - "Engineer at Widget Ltd · 2 yrs\nContract · Remote"
+
+    AllProfiles:
+      type: object
+      description: >
+        The complete store: a map from canonical profile URL to ProfileData.
+      additionalProperties:
+        $ref: "#/components/schemas/ProfileData"
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message.
+
+  responses:
+    NotFound:
+      description: The requested profile or field does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Profile not found"
+
+    BadRequest:
+      description: The request body is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "value must not be blank"
