@@ -40,7 +40,7 @@
   panel.appendChild(status);
 
   const shortcuts = document.createElement('div');
-  shortcuts.textContent = 'Ctrl+Alt+1..6 mezovalsztas, Ctrl+Alt+0 panel eloterbe';
+  shortcuts.textContent = 'Ctrl+Alt+1..7 mezovalsztas, Ctrl+Alt+0 panel eloterbe';
   shortcuts.style.color = '#94a3b8';
   shortcuts.style.fontSize = '12px';
   panel.appendChild(shortcuts);
@@ -57,7 +57,9 @@
   let activeField = null;
   let hoveredElement = null;
   let promoteTimer = null;
-  const fieldLabels = ['Név', 'Headline', 'Info', 'Location', 'Contact', 'NumOfContacts'];
+  const experienceFieldLabel = 'Add Experience';
+  const experienceStorageKey = 'Experiences';
+  const fieldLabels = ['Név', 'Headline', 'Info', 'Location', 'Contact', 'NumOfContacts', experienceFieldLabel];
   const fieldKeyMap = {
     Digit1: 'Név',
     Digit2: 'Headline',
@@ -65,6 +67,7 @@
     Digit4: 'Location',
     Digit5: 'Contact',
     Digit6: 'NumOfContacts',
+    Digit7: experienceFieldLabel,
   };
 
   function supportsPopover() {
@@ -137,10 +140,21 @@
 
     chrome.storage.local.get([profileUrl], (result) => {
       const existingProfileData = result[profileUrl] || {};
-      const updatedProfileData = {
-        ...existingProfileData,
-        [fieldName]: value,
-      };
+      const updatedProfileData =
+        fieldName === experienceFieldLabel
+          ? {
+              ...existingProfileData,
+              [experienceStorageKey]: [
+                ...(Array.isArray(existingProfileData[experienceStorageKey])
+                  ? existingProfileData[experienceStorageKey]
+                  : []),
+                value,
+              ],
+            }
+          : {
+              ...existingProfileData,
+              [fieldName]: value,
+            };
 
       chrome.storage.local.set({ [profileUrl]: updatedProfileData }, () => {
         if (chrome.runtime.lastError) {
@@ -152,7 +166,9 @@
         console.log('Saved profile data:', {
           [profileUrl]: updatedProfileData,
         });
-        setStatus(`${fieldName} elmentve`);
+        setStatus(
+          fieldName === experienceFieldLabel ? 'Tapasztalat hozzaadva' : `${fieldName} elmentve`
+        );
       });
     });
   }
