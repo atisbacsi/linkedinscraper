@@ -169,6 +169,7 @@
         setStatus(
           fieldName === experienceFieldLabel ? 'Tapasztalat hozzaadva' : `${fieldName} elmentve`
         );
+          markButtonAsSaved(fieldName, true);
       });
     });
   }
@@ -230,13 +231,56 @@
     return createButton('Export JSON', exportStorageAsJson);
   }
 
-  fieldLabels.forEach((label) => {
-    panel.appendChild(createButton(label));
-  });
+    const buttonMap = {};
+
+    function markButtonAsSaved(fieldName, saved) {
+      const btn = buttonMap[fieldName];
+      if (!btn) {
+        return;
+      }
+      if (saved) {
+        btn.style.background = '#bbf7d0';
+        btn.style.color = '#14532d';
+        if (!btn.textContent.startsWith('✓ ')) {
+          btn.textContent = '✓ ' + btn.textContent;
+        }
+      } else {
+        btn.style.background = '#e2e8f0';
+        btn.style.color = '#0f172a';
+        btn.textContent = fieldName;
+      }
+    }
+
+    function refreshButtonStates() {
+      const profileUrl = getStorageProfileUrl();
+      chrome.storage.local.get([profileUrl], (result) => {
+        if (chrome.runtime.lastError) {
+          return;
+        }
+        const data = result[profileUrl] || {};
+        fieldLabels.forEach((label) => {
+          const storageKey = label === experienceFieldLabel ? experienceStorageKey : label;
+          const value = data[storageKey];
+          const hasSavedData =
+            label === experienceFieldLabel
+              ? Array.isArray(value) && value.length > 0
+              : value !== undefined && value !== null && value !== '';
+          markButtonAsSaved(label, hasSavedData);
+        });
+      });
+    }
+
+    fieldLabels.forEach((label) => {
+      const btn = createButton(label);
+      buttonMap[label] = btn;
+      panel.appendChild(btn);
+    });
 
   panel.appendChild(createExportButton());
 
   document.body.appendChild(panel);
+
+    refreshButtonStates();
 
   if (supportsPopover()) {
     panel.setAttribute('popover', 'manual');
