@@ -69,21 +69,31 @@
   const fieldLabels = [
     'Name',
     'Headline',
-    'Info',
     'Location',
     'NumOfContacts',
     'Contact',
+    'Info',
     experienceFieldLabel,
   ];
   const fieldKeyMap = {
     Digit1: 'Name',
     Digit2: 'Headline',
-    Digit3: 'Info',
-    Digit4: 'Location',
-    Digit5: 'NumOfContacts',
-    Digit6: 'Contact',
+    Digit3: 'Location',
+    Digit4: 'NumOfContacts',
+    Digit5: 'Contact',
+    Digit6: 'Info',
     Digit7: experienceFieldLabel,
   };
+  const fieldHotkeyMap = {
+    Name: '1',
+    Headline: '2',
+    Location: '3',
+    NumOfContacts: '4',
+    Contact: '5',
+    Info: '6',
+    [experienceFieldLabel]: '7',
+  };
+  let hotkeyHintsVisible = false;
 
   function supportsPopover() {
     return 'showPopover' in panel && 'hidePopover' in panel;
@@ -276,26 +286,58 @@
   }
 
     const buttonMap = {};
+    const buttonStateMap = {};
+
+    function renderButtonLabel(fieldName) {
+      const btn = buttonMap[fieldName];
+      const state = buttonStateMap[fieldName];
+      if (!btn || !state) {
+        return;
+      }
+
+      const hotkeyPrefix = hotkeyHintsVisible ? `${fieldHotkeyMap[fieldName]} ` : '';
+
+      if (state.saved) {
+        if (fieldName === experienceFieldLabel) {
+          const safeCount = Number.isInteger(state.count) && state.count > 0 ? state.count : 0;
+          btn.textContent = `${hotkeyPrefix}✓ ${fieldName} (${safeCount})`;
+          return;
+        }
+        btn.textContent = `${hotkeyPrefix}✓ ${fieldName}`;
+        return;
+      }
+
+      btn.textContent = `${hotkeyPrefix}${fieldName}`;
+    }
+
+    function setHotkeyHintsVisible(visible) {
+      if (hotkeyHintsVisible === visible) {
+        return;
+      }
+
+      hotkeyHintsVisible = visible;
+      fieldLabels.forEach((label) => {
+        renderButtonLabel(label);
+      });
+    }
 
     function markButtonAsSaved(fieldName, saved, count) {
       const btn = buttonMap[fieldName];
       if (!btn) {
         return;
       }
+      buttonStateMap[fieldName] = {
+        saved,
+        count: Number.isInteger(count) ? count : 0,
+      };
       if (saved) {
         btn.style.background = '#bbf7d0';
         btn.style.color = '#14532d';
-        if (fieldName === experienceFieldLabel) {
-          const safeCount = Number.isInteger(count) && count > 0 ? count : 0;
-          btn.textContent = `✓ ${fieldName} (${safeCount})`;
-          return;
-        }
-        btn.textContent = `✓ ${fieldName}`;
       } else {
         btn.style.background = '#e2e8f0';
         btn.style.color = '#0f172a';
-        btn.textContent = fieldName;
       }
+      renderButtonLabel(fieldName);
     }
 
     function refreshButtonStates() {
@@ -324,6 +366,10 @@
     fieldLabels.forEach((label) => {
       const btn = createButton(label);
       buttonMap[label] = btn;
+      buttonStateMap[label] = {
+        saved: false,
+        count: 0,
+      };
       panel.appendChild(btn);
     });
 
@@ -411,6 +457,8 @@
   );
 
   function handleKeydown(event) {
+    setHotkeyHintsVisible(event.ctrlKey && event.altKey);
+
     if (event.ctrlKey && event.altKey) {
       const selectedField = fieldKeyMap[event.code];
 
@@ -435,5 +483,11 @@
     }
   }
 
+  function handleKeyup(event) {
+    setHotkeyHintsVisible(event.ctrlKey && event.altKey);
+  }
+
   globalThis.addEventListener('keydown', handleKeydown, true);
+  globalThis.addEventListener('keyup', handleKeyup, true);
+  globalThis.addEventListener('blur', () => setHotkeyHintsVisible(false));
 })();
