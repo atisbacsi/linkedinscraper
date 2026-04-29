@@ -37,12 +37,14 @@ paths:
                 "https://www.linkedin.com/in/example/":
                   Name: "Example Name"
                   Headline: "Software Engineer"
+                  Info: "Passionate about building great products."
                   Location: "Berlin, Germany"
                   Contact: "example@example.com"
                   NumOfContacts: "500+"
                   Experiences:
                     - "Senior Engineer at Acme Corp (2020–present)"
                     - "Engineer at Widget Ltd (2017–2020)"
+                  LastUpdatedAt: "2026-04-29T12:00:00.000Z"
 
   /profiles/{profileUrl}:
     parameters:
@@ -260,6 +262,7 @@ components:
         All stored data for a single LinkedIn profile.
         Every property is optional because the user may have only partially
         filled the profile so far.
+        LastUpdatedAt is updated whenever any field or experience entry is saved.
       properties:
         Name:
           type: string
@@ -278,6 +281,10 @@ components:
           items:
             type: string
           description: Ordered list of experience block texts, as appended by the user.
+        LastUpdatedAt:
+          type: string
+          format: date-time
+          description: ISO timestamp of the latest update for this profile.
       example:
         Name: "Example Name"
         Headline: "Software Engineer"
@@ -288,6 +295,7 @@ components:
         Experiences:
           - "Senior Engineer at Acme Corp · 3 yrs\nFull-time · Berlin, Germany"
           - "Engineer at Widget Ltd · 2 yrs\nContract · Remote"
+        LastUpdatedAt: "2026-04-29T12:00:00.000Z"
 
     AllProfiles:
       type: object
