@@ -59,14 +59,22 @@
   let promoteTimer = null;
   const experienceFieldLabel = 'Add Experience';
   const experienceStorageKey = 'Experiences';
-  const fieldLabels = ['Name', 'Headline', 'Info', 'Location', 'Contact', 'NumOfContacts', experienceFieldLabel];
+  const fieldLabels = [
+    'Name',
+    'Headline',
+    'Info',
+    'Location',
+    'NumOfContacts',
+    'Contact',
+    experienceFieldLabel,
+  ];
   const fieldKeyMap = {
     Digit1: 'Name',
     Digit2: 'Headline',
     Digit3: 'Info',
     Digit4: 'Location',
-    Digit5: 'Contact',
-    Digit6: 'NumOfContacts',
+    Digit5: 'NumOfContacts',
+    Digit6: 'Contact',
     Digit7: experienceFieldLabel,
   };
 
@@ -169,7 +177,14 @@
         setStatus(
           fieldName === experienceFieldLabel ? 'Tapasztalat hozzaadva' : `${fieldName} elmentve`
         );
-          markButtonAsSaved(fieldName, true);
+        if (fieldName === experienceFieldLabel) {
+          const experienceCount = Array.isArray(updatedProfileData[experienceStorageKey])
+            ? updatedProfileData[experienceStorageKey].length
+            : 0;
+          markButtonAsSaved(fieldName, experienceCount > 0, experienceCount);
+          return;
+        }
+        markButtonAsSaved(fieldName, true);
       });
     });
   }
@@ -233,7 +248,7 @@
 
     const buttonMap = {};
 
-    function markButtonAsSaved(fieldName, saved) {
+    function markButtonAsSaved(fieldName, saved, count) {
       const btn = buttonMap[fieldName];
       if (!btn) {
         return;
@@ -241,9 +256,12 @@
       if (saved) {
         btn.style.background = '#bbf7d0';
         btn.style.color = '#14532d';
-        if (!btn.textContent.startsWith('✓ ')) {
-          btn.textContent = '✓ ' + btn.textContent;
+        if (fieldName === experienceFieldLabel) {
+          const safeCount = Number.isInteger(count) && count > 0 ? count : 0;
+          btn.textContent = `✓ ${fieldName} (${safeCount})`;
+          return;
         }
+        btn.textContent = `✓ ${fieldName}`;
       } else {
         btn.style.background = '#e2e8f0';
         btn.style.color = '#0f172a';
@@ -261,11 +279,14 @@
         fieldLabels.forEach((label) => {
           const storageKey = label === experienceFieldLabel ? experienceStorageKey : label;
           const value = data[storageKey];
+          const experienceCount = Array.isArray(data[experienceStorageKey])
+            ? data[experienceStorageKey].length
+            : 0;
           const hasSavedData =
             label === experienceFieldLabel
-              ? Array.isArray(value) && value.length > 0
+              ? experienceCount > 0
               : value !== undefined && value !== null && value !== '';
-          markButtonAsSaved(label, hasSavedData);
+          markButtonAsSaved(label, hasSavedData, experienceCount);
         });
       });
     }
