@@ -60,6 +60,11 @@
   `;
   document.documentElement.appendChild(highlightStyle);
 
+  const importInput = document.createElement('input');
+  importInput.type = 'file';
+  importInput.accept = 'application/json,.json';
+  importInput.style.display = 'none';
+
   let activeField = null;
   let hoveredElement = null;
   let promoteTimer = null;
@@ -255,6 +260,41 @@
     });
   }
 
+  function replaceStorageData(parsedData) {
+    chrome.storage.local.clear(() => {
+      if (chrome.runtime.lastError) {
+        console.error('Storage clear failed:', chrome.runtime.lastError.message);
+        setStatus('Import sikertelen');
+        return;
+      }
+
+      chrome.storage.local.set(parsedData, () => {
+        if (chrome.runtime.lastError) {
+          console.error('Storage import failed:', chrome.runtime.lastError.message);
+          setStatus('Import sikertelen');
+          return;
+        }
+
+        console.log('Imported storage data:', parsedData);
+        setStatus('JSON import kesz');
+        refreshPanelForCurrentProfile(true);
+      });
+    });
+  }
+
+  function importStorageFromJson(file) {
+    file
+      .text()
+      .then((text) => {
+        const parsedData = JSON.parse(text);
+        replaceStorageData(parsedData);
+      })
+      .catch((error) => {
+        console.error('JSON import failed:', error);
+        setStatus('Import sikertelen');
+      });
+  }
+
   function createButton(label, clickHandler) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -284,6 +324,13 @@
 
   function createExportButton() {
     return createButton('Export JSON', exportStorageAsJson);
+  }
+
+  function createImportButton() {
+    return createButton('Import JSON', () => {
+      importInput.value = '';
+      importInput.click();
+    });
   }
 
     const buttonMap = {};
@@ -385,8 +432,19 @@
     });
 
   panel.appendChild(createExportButton());
+  panel.appendChild(createImportButton());
 
   document.body.appendChild(panel);
+  document.body.appendChild(importInput);
+
+  importInput.addEventListener('change', () => {
+    const [file] = importInput.files || [];
+    if (!file) {
+      return;
+    }
+
+    importStorageFromJson(file);
+  });
 
     refreshPanelForCurrentProfile(true);
 

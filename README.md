@@ -1,19 +1,23 @@
-# LinkedIn Scrape Plugin
+# LinkedIn Handy Scraper Panel
 
-This project is a simple Chrome Extension Manifest V3 content-script tool for collecting structured data from LinkedIn profile pages.
+This project is a lightweight Chrome Extension based on Manifest V3. It injects a small floating panel into LinkedIn profile pages and lets you capture page content by selecting elements directly in the DOM.
 
-It injects a small control panel on the right side of LinkedIn pages. From there, you can activate a selection mode, click specific elements on the page, and save their `innerText` values into `chrome.storage.local`.
+Selected values are stored in `chrome.storage.local`, grouped by profile URL, and can be exported to or imported from JSON.
 
 ## Features
 
-- Runs only on `linkedin.com`
+- Active only on `linkedin.com`
 - Right-side floating control panel
-- Click-to-select data extraction from LinkedIn profile pages
-- Storage in `chrome.storage.local`, grouped by profile URL
+- Click-to-select extraction from LinkedIn profile pages
+- Keyboard shortcuts for fast field selection
+- Visual selection highlight for hovered elements
+- Per-profile storage in `chrome.storage.local`
 - Contact overlay URL normalization
-- Keyboard shortcuts for quick field selection
-- Experience entries stored as an array
-- Full storage export as a JSON file
+- `Experiences` stored as an array
+- Last updated timestamp stored per profile
+- Saved-state indicators on field buttons
+- Full JSON export
+- Full JSON import that replaces existing storage content
 
 ## Captured Fields
 
@@ -21,38 +25,46 @@ The extension currently supports these fields:
 
 - `Name`
 - `Headline`
-- `Info`
 - `Location`
-- `Contact`
 - `NumOfContacts`
-- `Add Experience` → appended to an `Experiences` array
+- `Contact`
+- `Info`
+- `Add Experience` → appended to the `Experiences` array
 
 ## How It Works
 
 1. Open a LinkedIn profile page.
-2. Click one of the buttons in the panel.
+2. Click a field button in the floating panel, or use the matching keyboard shortcut.
 3. The extension enters selection mode.
 4. Click an element on the page.
-5. The selected element's `innerText` is saved under the current profile URL in `chrome.storage.local`.
+5. The selected element's `innerText` is saved for the current profile.
 
-For the LinkedIn contact overlay URL:
+The panel also shows:
 
-- `https://www.linkedin.com/in/example/overlay/contact-info/`
+- current status
+- last update timestamp for the active profile
+- checkmarks for fields that already have saved data
+- experience count for the `Add Experience` button
 
-the extension stores the data under:
+## URL Normalization
 
-- `https://www.linkedin.com/in/example/`
+When data is captured from LinkedIn's contact overlay view, the value is stored under the base profile URL instead of the overlay URL.
+
+Example:
+
+- source page: `https://www.linkedin.com/in/example/overlay/contact-info/`
+- storage key: `https://www.linkedin.com/in/example/`
 
 ## Keyboard Shortcuts
 
-The extension also supports keyboard shortcuts:
+The extension supports these shortcuts:
 
 - `Ctrl + Alt + 1` → `Name`
 - `Ctrl + Alt + 2` → `Headline`
-- `Ctrl + Alt + 3` → `Info`
-- `Ctrl + Alt + 4` → `Location`
+- `Ctrl + Alt + 3` → `Location`
+- `Ctrl + Alt + 4` → `NumOfContacts`
 - `Ctrl + Alt + 5` → `Contact`
-- `Ctrl + Alt + 6` → `NumOfContacts`
+- `Ctrl + Alt + 6` → `Info`
 - `Ctrl + Alt + 7` → `Add Experience`
 - `Ctrl + Alt + 0` → bring the panel to the front
 - `Escape` → exit selection mode
@@ -61,7 +73,7 @@ On macOS, `Alt` corresponds to the `Option` key.
 
 ## Data Format
 
-Saved data is stored in `chrome.storage.local` as a JSON-like object keyed by profile URL.
+Saved data is stored in `chrome.storage.local` as an object keyed by profile URL.
 
 Example:
 
@@ -71,21 +83,30 @@ Example:
     "Name": "Example Name",
     "Headline": "Software Engineer",
     "Location": "Berlin, Germany",
-    "Contact": "example@example.com",
     "NumOfContacts": "500+",
+    "Contact": "example@example.com",
+    "Info": "Open to work",
     "Experiences": [
       "Experience block 1",
       "Experience block 2"
-    ]
+    ],
+    "LastUpdatedAt": "2026-04-30T09:30:00.000Z"
   }
 }
 ```
 
-## JSON Export
+## JSON Export And Import
 
-The panel includes an `Export JSON` button.
+The panel includes two storage utility buttons:
 
-When clicked, it exports the full contents of `chrome.storage.local` into a downloadable `.json` file.
+- `Export JSON` downloads the full contents of `chrome.storage.local` as a `.json` file.
+- `Import JSON` opens a file picker, clears the existing local storage, and replaces it with the contents of the selected JSON file.
+
+The import is intentionally simple:
+
+- no schema validation
+- no merge logic
+- existing storage is fully replaced
 
 ## Installation
 
@@ -97,12 +118,13 @@ When clicked, it exports the full contents of `chrome.storage.local` into a down
 
 ## Project Structure
 
-- `manifest.json` → Chrome Extension Manifest V3 configuration
-- `content.js` → injected UI, selection logic, storage logic, export logic
+- `manifest.json` → extension manifest and LinkedIn URL matching
+- `content.js` → injected panel UI, selection flow, storage handling, import/export, hotkeys
 - `README.md` → project documentation
 
 ## Notes
 
-- This extension is intentionally lightweight and does not use a background service worker.
+- The extension does not use a background service worker.
 - The UI is injected directly by the content script.
-- Some LinkedIn overlays can affect interaction patterns, so keyboard shortcuts are supported as a fallback.
+- Some LinkedIn overlays can affect click interaction, so keyboard shortcuts are supported as a fallback.
+- Imported data is written directly to `chrome.storage.local`, so use the import feature carefully.
