@@ -453,7 +453,7 @@
     panel.style.inset = '120px 16px auto auto';
     panel.style.top = '120px';
     panel.style.left = 'auto';
-    panel.style.right = 'auto';
+    panel.style.right = '16px';
     panel.style.transform = 'none';
     promotePanelToFront();
   }
