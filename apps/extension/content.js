@@ -74,6 +74,7 @@
   let activeField = null;
   let hoveredElement = null;
   let promoteTimer = null;
+  let profileRefreshIntervalId = null;
   let lastSyncedProfileUrl = '';
   const profileLastUpdatedKey = 'LastUpdatedAt';
   const experienceFieldLabel = 'Add Experience';
@@ -146,6 +147,23 @@
 
   function setBackendStatus(message) {
     backendInfo.textContent = `Backend: ${message}`;
+  }
+
+  function isExtensionContextValid() {
+    try {
+      return typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function handleInvalidExtensionContext() {
+    setStatus('Extension ujratoltve, frissitsd az oldalt');
+    setBackendStatus('context invalid');
+    if (profileRefreshIntervalId !== null) {
+      globalThis.clearInterval(profileRefreshIntervalId);
+      profileRefreshIntervalId = null;
+    }
   }
 
   function formatLastUpdated(timestamp) {
@@ -618,29 +636,47 @@
     }
 
     function refreshButtonStates() {
+      if (!isExtensionContextValid()) {
+        handleInvalidExtensionContext();
+        return;
+      }
+
       const profileUrl = getStorageProfileUrl();
-      chrome.storage.local.get([profileUrl], (result) => {
-        if (chrome.runtime.lastError) {
+      try {
+        chrome.storage.local.get([profileUrl], (result) => {
+          if (chrome.runtime.lastError) {
+            return;
+          }
+          const data = result[profileUrl] || {};
+          fieldLabels.forEach((label) => {
+            const storageKey = label === experienceFieldLabel ? experienceStorageKey : label;
+            const value = data[storageKey];
+            const experienceCount = Array.isArray(data[experienceStorageKey])
+              ? data[experienceStorageKey].length
+              : 0;
+            const hasSavedData =
+              label === experienceFieldLabel
+                ? experienceCount > 0
+                : value !== undefined && value !== null && value !== '';
+            markButtonAsSaved(label, hasSavedData, experienceCount);
+          });
+          setLastUpdatedDisplay(data[profileLastUpdatedKey]);
+        });
+      } catch (error) {
+        if (String(error).includes('Extension context invalidated')) {
+          handleInvalidExtensionContext();
           return;
         }
-        const data = result[profileUrl] || {};
-        fieldLabels.forEach((label) => {
-          const storageKey = label === experienceFieldLabel ? experienceStorageKey : label;
-          const value = data[storageKey];
-          const experienceCount = Array.isArray(data[experienceStorageKey])
-            ? data[experienceStorageKey].length
-            : 0;
-          const hasSavedData =
-            label === experienceFieldLabel
-              ? experienceCount > 0
-              : value !== undefined && value !== null && value !== '';
-          markButtonAsSaved(label, hasSavedData, experienceCount);
-        });
-        setLastUpdatedDisplay(data[profileLastUpdatedKey]);
-      });
+        throw error;
+      }
     }
 
     function refreshPanelForCurrentProfile(force) {
+      if (!isExtensionContextValid()) {
+        handleInvalidExtensionContext();
+        return;
+      }
+
       const profileUrl = getStorageProfileUrl();
       if (!force && profileUrl === lastSyncedProfileUrl) {
         return;
@@ -794,5 +830,5 @@
   globalThis.addEventListener('blur', () => setHotkeyHintsVisible(false));
   globalThis.addEventListener('popstate', () => refreshPanelForCurrentProfile(true));
   globalThis.addEventListener('focus', () => refreshPanelForCurrentProfile(true));
-  globalThis.setInterval(() => refreshPanelForCurrentProfile(false), 700);
+  profileRefreshIntervalId = globalThis.setInterval(() => refreshPanelForCurrentProfile(false), 700);
 })();
