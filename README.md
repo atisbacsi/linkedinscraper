@@ -1,11 +1,11 @@
 # LinkedIn Scraper Monorepo
 
-This repository now contains the LinkedIn scraper Chrome extension and the backend service scaffold in a single monorepo.
+This repository contains the LinkedIn scraper Chrome extension and a Spring Boot backend service in a single monorepo.
 
 ## Structure
 
 - `apps/extension` - Manifest V3 Chrome extension for collecting LinkedIn profile fragments
-- `apps/backend` - Spring Boot backend scaffold prepared for Docker, GraalVM, and SQLite
+- `apps/backend` - Spring Boot backend prepared for Docker, GraalVM, and SQLite
 - `data` - local runtime directory for SQLite files when the backend runs in Docker Compose
 
 ## Backend Stack
@@ -48,7 +48,7 @@ SQLite database file is stored in `./data/linkedin-scraper.sqlite` when using Do
 
 ## Current Status
 
-The backend is intentionally scaffold-only for now:
+Implemented and verified so far:
 
 - ✅ Monorepo structure with Maven aggregator
 - ✅ Maven Wrapper for reproducible builds (`./mvnw` works locally and in Docker)
@@ -56,12 +56,17 @@ The backend is intentionally scaffold-only for now:
 - ✅ Docker multi-stage build configured (GraalVM native-image ready)
 - ✅ SQLite datasource configuration in place
 - ✅ Spring Boot 3 + Java 21 setup
-- ✅ Profile API endpoints stubbed (return `501 Not Implemented`)
+- ✅ SQLite-backed profile API endpoints implemented (`/profiles`, `/export`, field + experiences operations)
 - ✅ OpenAPI contract in `apps/backend/openapi.yaml`
+
+Validated runtime checks:
+
+- ✅ `/actuator/health` returns `UP`
+- ✅ `/swagger-ui.html` available (redirects to `/swagger-ui/index.html`)
+- ✅ `/api-docs` responds with HTTP `200`
 
 Next steps:
 
-1. Wire SQLite persistence layer (JDBC, schema setup).
-2. Implement profile CRUD endpoints against SQLite.
-3. Add extension-to-backend synchronization logic.
-4. Test Docker native build end-to-end.
+1. Add extension-to-backend synchronization logic.
+2. Add endpoint integration tests for profile CRUD/export paths.
+3. Add schema migration strategy (Flyway/Liquibase) for future DB changes.

@@ -227,6 +227,9 @@ components:
       required: true
       description: >
         The canonical LinkedIn profile URL, URL-encoded.
+        For maximum compatibility with path-segment handling in web servers,
+        clients should double-encode this value (encode the already encoded URL
+        once more before putting it into the path).
         Contact overlay URLs are normalised to the base profile URL before
         storage (i.e. the `/overlay/contact-info/` suffix is stripped).
       schema:

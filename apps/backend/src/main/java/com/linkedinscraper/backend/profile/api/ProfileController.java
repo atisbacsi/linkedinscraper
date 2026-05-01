@@ -1,9 +1,16 @@
 package com.linkedinscraper.backend.profile.api;
 
+import com.linkedinscraper.backend.profile.service.ProfileFieldPolicy;
+import com.linkedinscraper.backend.profile.service.ProfileStorageService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -18,23 +25,38 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping(path = "/api/v1", produces = MediaType.APPLICATION_JSON_VALUE)
+@RequestMapping(produces = MediaType.APPLICATION_JSON_VALUE)
 @Validated
 public class ProfileController {
 
+  private final ProfileStorageService storageService;
+
+  public ProfileController(ProfileStorageService storageService) {
+    this.storageService = storageService;
+  }
+
   @GetMapping("/profiles")
   public ResponseEntity<Object> listProfiles() {
-    return notImplemented("Profile listing is not implemented yet.");
+    return ResponseEntity.ok(storageService.listProfiles());
   }
 
   @GetMapping("/profiles/{profileUrl}")
   public ResponseEntity<Object> getProfile(@PathVariable String profileUrl) {
-    return notImplemented("Profile lookup is not implemented yet.");
+    String normalizedProfileUrl = normalizeProfileUrl(profileUrl);
+    return storageService
+      .getProfile(normalizedProfileUrl)
+        .<ResponseEntity<Object>>map(ResponseEntity::ok)
+        .orElseGet(() -> notFound("Profile not found"));
   }
 
   @DeleteMapping("/profiles/{profileUrl}")
   public ResponseEntity<Object> deleteProfile(@PathVariable String profileUrl) {
-    return notImplemented("Profile deletion is not implemented yet.");
+    String normalizedProfileUrl = normalizeProfileUrl(profileUrl);
+    boolean deleted = storageService.deleteProfile(normalizedProfileUrl);
+    if (!deleted) {
+      return notFound("Profile not found");
+    }
+    return ResponseEntity.noContent().build();
   }
 
   @PutMapping("/profiles/{profileUrl}/fields/{fieldName}")
@@ -42,42 +64,91 @@ public class ProfileController {
       @PathVariable String profileUrl,
       @PathVariable String fieldName,
       @Valid @RequestBody FieldValueRequest request) {
-    return notImplemented("Field storage is not implemented yet.");
+    String normalizedProfileUrl = normalizeProfileUrl(profileUrl);
+    if (!ProfileFieldPolicy.isAllowedScalarField(fieldName)) {
+      return badRequest("Invalid field name");
+    }
+
+    return ResponseEntity.ok(
+        storageService.saveField(normalizedProfileUrl, fieldName, request.value().trim()));
   }
 
   @DeleteMapping("/profiles/{profileUrl}/fields/{fieldName}")
   public ResponseEntity<Object> deleteField(
       @PathVariable String profileUrl,
       @PathVariable String fieldName) {
-    return notImplemented("Field deletion is not implemented yet.");
+    String normalizedProfileUrl = normalizeProfileUrl(profileUrl);
+    if (!ProfileFieldPolicy.isAllowedScalarField(fieldName)) {
+      return badRequest("Invalid field name");
+    }
+
+    return storageService
+        .deleteField(normalizedProfileUrl, fieldName)
+        .<ResponseEntity<Object>>map(ResponseEntity::ok)
+        .orElseGet(() -> notFound("Profile or field not found"));
   }
 
   @PostMapping("/profiles/{profileUrl}/experiences")
   public ResponseEntity<Object> addExperience(
       @PathVariable String profileUrl,
       @Valid @RequestBody FieldValueRequest request) {
-    return notImplemented("Experience storage is not implemented yet.");
+    String normalizedProfileUrl = normalizeProfileUrl(profileUrl);
+    return ResponseEntity.ok(
+        storageService.addExperience(normalizedProfileUrl, request.value().trim()));
   }
 
   @DeleteMapping("/profiles/{profileUrl}/experiences")
   public ResponseEntity<Object> clearExperiences(@PathVariable String profileUrl) {
-    return notImplemented("Experience clearing is not implemented yet.");
+    String normalizedProfileUrl = normalizeProfileUrl(profileUrl);
+    return storageService
+      .clearExperiences(normalizedProfileUrl)
+        .<ResponseEntity<Object>>map(ResponseEntity::ok)
+        .orElseGet(() -> notFound("Profile not found"));
   }
 
   @DeleteMapping("/profiles/{profileUrl}/experiences/{index}")
   public ResponseEntity<Object> deleteExperience(
       @PathVariable String profileUrl,
       @PathVariable @Min(0) int index) {
-    return notImplemented("Experience deletion is not implemented yet.");
+    String normalizedProfileUrl = normalizeProfileUrl(profileUrl);
+    return storageService
+      .deleteExperience(normalizedProfileUrl, index)
+        .<ResponseEntity<Object>>map(ResponseEntity::ok)
+        .orElseGet(() -> notFound("Profile or experience entry not found"));
   }
 
   @GetMapping("/export")
   public ResponseEntity<Object> exportJson() {
-    return notImplemented("JSON export is not implemented yet.");
+    String timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now()).replace(":", "-");
+    String filename = "linkedin-profiles-" + timestamp + ".json";
+
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+      .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+        .body(storageService.listProfiles());
   }
 
-  private ResponseEntity<Object> notImplemented(String message) {
-    return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(Map.of("error", message));
+  private ResponseEntity<Object> notFound(String message) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", message));
+  }
+
+  private ResponseEntity<Object> badRequest(String message) {
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", message));
+  }
+
+  private String normalizeProfileUrl(String profileUrl) {
+    String decodedOnce = URLDecoder.decode(profileUrl, StandardCharsets.UTF_8);
+    String decodedTwice = URLDecoder.decode(decodedOnce, StandardCharsets.UTF_8);
+
+    if (looksLikeHttpUrl(decodedTwice)) {
+      return decodedTwice;
+    }
+
+    return decodedOnce;
+  }
+
+  private boolean looksLikeHttpUrl(String value) {
+    return value.startsWith("http://") || value.startsWith("https://");
   }
 
   public record FieldValueRequest(@NotBlank String value) {}
