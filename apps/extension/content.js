@@ -166,6 +166,97 @@
     }
   }
 
+  function safeStorageGet(keys, onSuccess) {
+    if (!isExtensionContextValid()) {
+      handleInvalidExtensionContext();
+      return;
+    }
+
+    try {
+      chrome.storage.local.get(keys, (result) => {
+        if (!isExtensionContextValid()) {
+          handleInvalidExtensionContext();
+          return;
+        }
+        if (chrome.runtime.lastError) {
+          if (String(chrome.runtime.lastError.message).includes('Extension context invalidated')) {
+            handleInvalidExtensionContext();
+          }
+          return;
+        }
+        onSuccess(result);
+      });
+    } catch (error) {
+      if (String(error).includes('Extension context invalidated')) {
+        handleInvalidExtensionContext();
+        return;
+      }
+      throw error;
+    }
+  }
+
+  function safeStorageSet(data, onSuccess) {
+    if (!isExtensionContextValid()) {
+      handleInvalidExtensionContext();
+      return;
+    }
+
+    try {
+      chrome.storage.local.set(data, () => {
+        if (!isExtensionContextValid()) {
+          handleInvalidExtensionContext();
+          return;
+        }
+        if (chrome.runtime.lastError) {
+          if (String(chrome.runtime.lastError.message).includes('Extension context invalidated')) {
+            handleInvalidExtensionContext();
+          }
+          return;
+        }
+        if (onSuccess) {
+          onSuccess();
+        }
+      });
+    } catch (error) {
+      if (String(error).includes('Extension context invalidated')) {
+        handleInvalidExtensionContext();
+        return;
+      }
+      throw error;
+    }
+  }
+
+  function safeStorageClear(onSuccess) {
+    if (!isExtensionContextValid()) {
+      handleInvalidExtensionContext();
+      return;
+    }
+
+    try {
+      chrome.storage.local.clear(() => {
+        if (!isExtensionContextValid()) {
+          handleInvalidExtensionContext();
+          return;
+        }
+        if (chrome.runtime.lastError) {
+          if (String(chrome.runtime.lastError.message).includes('Extension context invalidated')) {
+            handleInvalidExtensionContext();
+          }
+          return;
+        }
+        if (onSuccess) {
+          onSuccess();
+        }
+      });
+    } catch (error) {
+      if (String(error).includes('Extension context invalidated')) {
+        handleInvalidExtensionContext();
+        return;
+      }
+      throw error;
+    }
+  }
+
   function formatLastUpdated(timestamp) {
     if (!timestamp) {
       return '-';
@@ -308,12 +399,7 @@
           return;
         }
 
-        chrome.storage.local.set({ [profileUrl]: result.data }, () => {
-          if (chrome.runtime.lastError) {
-            setStatus('Local frissites sikertelen');
-            return;
-          }
-
+        safeStorageSet({ [profileUrl]: result.data }, () => {
           setStatus('Profil letoltve backendbol');
           setBackendStatus('kapcsolodva');
           refreshPanelForCurrentProfile(true);
@@ -329,12 +415,7 @@
   function syncCurrentProfileToBackend() {
     const profileUrl = getStorageProfileUrl();
 
-    chrome.storage.local.get([profileUrl], (result) => {
-      if (chrome.runtime.lastError) {
-        setStatus('Local olvasas sikertelen');
-        return;
-      }
-
+    safeStorageGet([profileUrl], (result) => {
       const localProfileData = result[profileUrl];
       if (!localProfileData) {
         setStatus('Nincs local profil adat');
@@ -424,7 +505,7 @@
   function saveSelection(fieldName, value) {
     const profileUrl = getStorageProfileUrl();
 
-    chrome.storage.local.get([profileUrl], (result) => {
+    safeStorageGet([profileUrl], (result) => {
       const existingProfileData = result[profileUrl] || {};
       const updatedProfileDataBase =
         fieldName === experienceFieldLabel
@@ -446,13 +527,7 @@
         [profileLastUpdatedKey]: new Date().toISOString(),
       };
 
-      chrome.storage.local.set({ [profileUrl]: updatedProfileData }, () => {
-        if (chrome.runtime.lastError) {
-          console.error('Storage save failed:', chrome.runtime.lastError.message);
-          setStatus('Mentés sikertelen');
-          return;
-        }
-
+      safeStorageSet({ [profileUrl]: updatedProfileData }, () => {
         console.log('Saved profile data:', {
           [profileUrl]: updatedProfileData,
         });
@@ -500,23 +575,12 @@
   }
 
   function replaceStorageData(parsedData) {
-    chrome.storage.local.clear(() => {
-      if (chrome.runtime.lastError) {
-        console.error('Storage clear failed:', chrome.runtime.lastError.message);
-        setStatus('Import sikertelen');
-        return;
-      }
-
-      chrome.storage.local.set(parsedData, () => {
-        if (chrome.runtime.lastError) {
-          console.error('Storage import failed:', chrome.runtime.lastError.message);
-          setStatus('Import sikertelen');
-          return;
-        }
-
+    safeStorageClear(() => {
+      safeStorageSet(parsedData, () => {
         console.log('Imported storage data:', parsedData);
         setStatus('JSON import kesz');
         refreshPanelForCurrentProfile(true);
+        checkBackendConnection();
       });
     });
   }
@@ -642,33 +706,22 @@
       }
 
       const profileUrl = getStorageProfileUrl();
-      try {
-        chrome.storage.local.get([profileUrl], (result) => {
-          if (chrome.runtime.lastError) {
-            return;
-          }
-          const data = result[profileUrl] || {};
-          fieldLabels.forEach((label) => {
-            const storageKey = label === experienceFieldLabel ? experienceStorageKey : label;
-            const value = data[storageKey];
-            const experienceCount = Array.isArray(data[experienceStorageKey])
-              ? data[experienceStorageKey].length
-              : 0;
-            const hasSavedData =
-              label === experienceFieldLabel
-                ? experienceCount > 0
-                : value !== undefined && value !== null && value !== '';
-            markButtonAsSaved(label, hasSavedData, experienceCount);
-          });
-          setLastUpdatedDisplay(data[profileLastUpdatedKey]);
+      safeStorageGet([profileUrl], (result) => {
+        const data = result[profileUrl] || {};
+        fieldLabels.forEach((label) => {
+          const storageKey = label === experienceFieldLabel ? experienceStorageKey : label;
+          const value = data[storageKey];
+          const experienceCount = Array.isArray(data[experienceStorageKey])
+            ? data[experienceStorageKey].length
+            : 0;
+          const hasSavedData =
+            label === experienceFieldLabel
+              ? experienceCount > 0
+              : value !== undefined && value !== null && value !== '';
+          markButtonAsSaved(label, hasSavedData, experienceCount);
         });
-      } catch (error) {
-        if (String(error).includes('Extension context invalidated')) {
-          handleInvalidExtensionContext();
-          return;
-        }
-        throw error;
-      }
+        setLastUpdatedDisplay(data[profileLastUpdatedKey]);
+      });
     }
 
     function refreshPanelForCurrentProfile(force) {
