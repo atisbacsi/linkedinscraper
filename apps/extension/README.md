@@ -19,7 +19,7 @@ Selected values are stored in `chrome.storage.local`, grouped by profile URL, an
 - Full JSON export
 - Full JSON import that replaces existing storage content
 - Automatic backend sync on field save
-- Manual profile sync buttons (pull from backend / push to backend)
+- Manual full-collection sync buttons (pull from backend / push to backend)
 
 ## Captured Fields
 
@@ -106,8 +106,8 @@ The panel includes two storage utility buttons:
 
 The panel also includes backend sync buttons:
 
-- `Sync From Backend` pulls the current profile from the backend and stores it in `chrome.storage.local`.
-- `Sync To Backend` pushes the current profile from `chrome.storage.local` to the backend.
+- `Sync From Backend` pulls the full backend dataset (`/profiles`) and replaces `chrome.storage.local`.
+- `Sync To Backend` pushes the full local dataset to the backend (export/import-like full replace).
 
 The import is intentionally simple:
 

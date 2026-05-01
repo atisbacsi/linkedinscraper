@@ -378,34 +378,80 @@
     })();
   }
 
-  function syncCurrentProfileFromBackend() {
-    const profileUrl = getStorageProfileUrl();
+  async function pushProfileToBackend(profileUrl, profileData) {
+    const scalarFields = fieldLabels.filter((label) => label !== experienceFieldLabel);
 
+    for (const fieldName of scalarFields) {
+      const value = profileData[fieldName];
+      if (typeof value !== 'string' || value.trim() === '') {
+        continue;
+      }
+
+      const result = await backendRequest(getBackendFieldPath(profileUrl, fieldName), {
+        method: 'PUT',
+        body: JSON.stringify({ value: value.trim() }),
+      });
+
+      if (!result.ok) {
+        return { ok: false, status: result.status };
+      }
+    }
+
+    const clearResult = await backendRequest(getBackendExperiencesPath(profileUrl), {
+      method: 'DELETE',
+    });
+
+    if (!clearResult.ok && clearResult.status !== 404) {
+      return { ok: false, status: clearResult.status };
+    }
+
+    const experiences = Array.isArray(profileData[experienceStorageKey])
+      ? profileData[experienceStorageKey]
+      : [];
+
+    for (const experience of experiences) {
+      if (typeof experience !== 'string' || experience.trim() === '') {
+        continue;
+      }
+
+      const result = await backendRequest(getBackendExperiencesPath(profileUrl), {
+        method: 'POST',
+        body: JSON.stringify({ value: experience.trim() }),
+      });
+
+      if (!result.ok) {
+        return { ok: false, status: result.status };
+      }
+    }
+
+    return { ok: true, status: 200 };
+  }
+
+  function syncCurrentProfileFromBackend() {
     (async () => {
       try {
-        const result = await backendRequest(getBackendProfilePath(profileUrl), {
+        const result = await backendRequest('/profiles', {
           method: 'GET',
         });
 
-        if (result.status === 404) {
-          setStatus('Backendben nincs ilyen profil');
-          setBackendStatus('kapcsolodva');
-          return;
-        }
-
-        if (!result.ok || !result.data) {
+        if (!result.ok || !result.data || typeof result.data !== 'object') {
           setStatus('Backend letoltes sikertelen');
           setBackendStatus(`hiba (${result.status})`);
           return;
         }
 
-        safeStorageSet({ [profileUrl]: result.data }, () => {
-          setStatus('Profil letoltve backendbol');
-          setBackendStatus('kapcsolodva');
-          refreshPanelForCurrentProfile(true);
+        const backendData = result.data;
+        const profileCount = Object.keys(backendData).length;
+
+        safeStorageClear(() => {
+          safeStorageSet(backendData, () => {
+            setStatus(`Teljes backend letoltve (${profileCount} profil)`);
+            setBackendStatus('kapcsolodva');
+            refreshPanelForCurrentProfile(true);
+          });
         });
       } catch (error) {
-        console.error('Backend fetch failed:', error);
+        console.error('Backend full fetch failed:', error);
         setStatus('Backend eleres sikertelen');
         setBackendStatus('nem elerheto');
       }
@@ -413,72 +459,56 @@
   }
 
   function syncCurrentProfileToBackend() {
-    const profileUrl = getStorageProfileUrl();
-
-    safeStorageGet([profileUrl], (result) => {
-      const localProfileData = result[profileUrl];
-      if (!localProfileData) {
-        setStatus('Nincs local profil adat');
-        return;
-      }
-
+    safeStorageGet(null, (storedData) => {
       (async () => {
         try {
-          const scalarFields = fieldLabels.filter((label) => label !== experienceFieldLabel);
-
-          for (const fieldName of scalarFields) {
-            const value = localProfileData[fieldName];
-            if (typeof value !== 'string' || value.trim() === '') {
-              continue;
-            }
-
-            const result = await backendRequest(getBackendFieldPath(profileUrl, fieldName), {
-              method: 'PUT',
-              body: JSON.stringify({ value }),
-            });
-
-            if (!result.ok) {
-              setStatus(`Backend push hiba (${result.status})`);
-              setBackendStatus(`hiba (${result.status})`);
-              return;
-            }
-          }
-
-          const experiences = Array.isArray(localProfileData[experienceStorageKey])
-            ? localProfileData[experienceStorageKey]
-            : [];
-
-          const clearResult = await backendRequest(getBackendExperiencesPath(profileUrl), {
-            method: 'DELETE',
+          const localEntries = Object.entries(storedData).filter((entry) => {
+            const [profileUrl, profileData] = entry;
+            return (
+              typeof profileUrl === 'string' &&
+              (profileUrl.startsWith('http://') || profileUrl.startsWith('https://')) &&
+              !!profileData &&
+              typeof profileData === 'object' &&
+              !Array.isArray(profileData)
+            );
           });
 
-          if (!clearResult.ok && clearResult.status !== 404) {
-            setStatus(`Backend push hiba (${clearResult.status})`);
-            setBackendStatus(`hiba (${clearResult.status})`);
+          const backendProfilesResult = await backendRequest('/profiles', {
+            method: 'GET',
+          });
+
+          if (!backendProfilesResult.ok || typeof backendProfilesResult.data !== 'object') {
+            setStatus(`Backend push hiba (${backendProfilesResult.status})`);
+            setBackendStatus(`hiba (${backendProfilesResult.status})`);
             return;
           }
 
-          for (const experience of experiences) {
-            if (typeof experience !== 'string' || experience.trim() === '') {
-              continue;
-            }
-
-            const result = await backendRequest(getBackendExperiencesPath(profileUrl), {
-              method: 'POST',
-              body: JSON.stringify({ value: experience }),
+          const backendProfileUrls = Object.keys(backendProfilesResult.data || {});
+          for (const profileUrl of backendProfileUrls) {
+            const result = await backendRequest(getBackendProfilePath(profileUrl), {
+              method: 'DELETE',
             });
 
-            if (!result.ok) {
-              setStatus(`Backend push hiba (${result.status})`);
+            if (!result.ok && result.status !== 404) {
+              setStatus(`Backend torles hiba (${result.status})`);
               setBackendStatus(`hiba (${result.status})`);
               return;
             }
           }
 
-          setStatus('Profil feltoltve backendbe');
+          for (const [profileUrl, profileData] of localEntries) {
+            const pushResult = await pushProfileToBackend(profileUrl, profileData);
+            if (!pushResult.ok) {
+              setStatus(`Backend push hiba (${pushResult.status})`);
+              setBackendStatus(`hiba (${pushResult.status})`);
+              return;
+            }
+          }
+
+          setStatus(`Teljes local feltoltve backendbe (${localEntries.length} profil)`);
           setBackendStatus('kapcsolodva');
         } catch (error) {
-          console.error('Backend push failed:', error);
+          console.error('Backend full push failed:', error);
           setStatus('Backend push sikertelen');
           setBackendStatus('nem elerheto');
         }
