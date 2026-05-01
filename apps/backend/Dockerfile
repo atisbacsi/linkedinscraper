@@ -1,4 +1,4 @@
-FROM ghcr.io/graalvm/native-image-community:21-ol9 AS build
+FROM ghcr.io/graalvm/native-image-community:25-ol9 AS build
 
 RUN microdnf install -y maven findutils tar gzip && microdnf clean all
 
