@@ -51,6 +51,12 @@
   shortcuts.style.fontSize = '12px';
   panel.appendChild(shortcuts);
 
+  const backendInfo = document.createElement('div');
+  backendInfo.textContent = 'Backend: ismeretlen';
+  backendInfo.style.color = '#94a3b8';
+  backendInfo.style.fontSize = '12px';
+  panel.appendChild(backendInfo);
+
   const highlightStyle = document.createElement('style');
   highlightStyle.textContent = `
     .floating-selector-hover {
@@ -100,6 +106,8 @@
     [experienceFieldLabel]: '7',
   };
   let hotkeyHintsVisible = false;
+  const backendBaseUrl = 'http://localhost:8080';
+  const backendRequestTimeoutMs = 6000;
 
   function supportsPopover() {
     return 'showPopover' in panel && 'hidePopover' in panel;
@@ -134,6 +142,10 @@
 
   function setStatus(message) {
     status.textContent = message;
+  }
+
+  function setBackendStatus(message) {
+    backendInfo.textContent = `Backend: ${message}`;
   }
 
   function formatLastUpdated(timestamp) {
@@ -183,6 +195,214 @@
     return url.toString();
   }
 
+  function getEncodedProfileUrl(profileUrl) {
+    return encodeURIComponent(encodeURIComponent(profileUrl));
+  }
+
+  function getBackendProfilePath(profileUrl) {
+    return `/profiles/${getEncodedProfileUrl(profileUrl)}`;
+  }
+
+  function getBackendFieldPath(profileUrl, fieldName) {
+    return `${getBackendProfilePath(profileUrl)}/fields/${encodeURIComponent(fieldName)}`;
+  }
+
+  function getBackendExperiencesPath(profileUrl) {
+    return `${getBackendProfilePath(profileUrl)}/experiences`;
+  }
+
+  async function backendRequest(path, options) {
+    const controller = new AbortController();
+    const timeoutHandle = globalThis.setTimeout(() => controller.abort(), backendRequestTimeoutMs);
+
+    try {
+      const response = await fetch(`${backendBaseUrl}${path}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options?.headers || {}),
+        },
+        signal: controller.signal,
+      });
+
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (_err) {
+        data = null;
+      }
+
+      return {
+        ok: response.ok,
+        status: response.status,
+        data,
+      };
+    } finally {
+      globalThis.clearTimeout(timeoutHandle);
+    }
+  }
+
+  function syncSelectionToBackend(profileUrl, fieldName, value) {
+    (async () => {
+      try {
+        const result =
+          fieldName === experienceFieldLabel
+            ? await backendRequest(getBackendExperiencesPath(profileUrl), {
+                method: 'POST',
+                body: JSON.stringify({ value }),
+              })
+            : await backendRequest(getBackendFieldPath(profileUrl, fieldName), {
+                method: 'PUT',
+                body: JSON.stringify({ value }),
+              });
+
+        if (!result.ok) {
+          setBackendStatus(`hiba (${result.status})`);
+          return;
+        }
+
+        setBackendStatus('kapcsolodva');
+      } catch (error) {
+        console.error('Backend sync failed:', error);
+        setBackendStatus('nem elerheto');
+      }
+    })();
+  }
+
+  function syncCurrentProfileFromBackend() {
+    const profileUrl = getStorageProfileUrl();
+
+    (async () => {
+      try {
+        const result = await backendRequest(getBackendProfilePath(profileUrl), {
+          method: 'GET',
+        });
+
+        if (result.status === 404) {
+          setStatus('Backendben nincs ilyen profil');
+          setBackendStatus('kapcsolodva');
+          return;
+        }
+
+        if (!result.ok || !result.data) {
+          setStatus('Backend letoltes sikertelen');
+          setBackendStatus(`hiba (${result.status})`);
+          return;
+        }
+
+        chrome.storage.local.set({ [profileUrl]: result.data }, () => {
+          if (chrome.runtime.lastError) {
+            setStatus('Local frissites sikertelen');
+            return;
+          }
+
+          setStatus('Profil letoltve backendbol');
+          setBackendStatus('kapcsolodva');
+          refreshPanelForCurrentProfile(true);
+        });
+      } catch (error) {
+        console.error('Backend fetch failed:', error);
+        setStatus('Backend eleres sikertelen');
+        setBackendStatus('nem elerheto');
+      }
+    })();
+  }
+
+  function syncCurrentProfileToBackend() {
+    const profileUrl = getStorageProfileUrl();
+
+    chrome.storage.local.get([profileUrl], (result) => {
+      if (chrome.runtime.lastError) {
+        setStatus('Local olvasas sikertelen');
+        return;
+      }
+
+      const localProfileData = result[profileUrl];
+      if (!localProfileData) {
+        setStatus('Nincs local profil adat');
+        return;
+      }
+
+      (async () => {
+        try {
+          const scalarFields = fieldLabels.filter((label) => label !== experienceFieldLabel);
+
+          for (const fieldName of scalarFields) {
+            const value = localProfileData[fieldName];
+            if (typeof value !== 'string' || value.trim() === '') {
+              continue;
+            }
+
+            const result = await backendRequest(getBackendFieldPath(profileUrl, fieldName), {
+              method: 'PUT',
+              body: JSON.stringify({ value }),
+            });
+
+            if (!result.ok) {
+              setStatus(`Backend push hiba (${result.status})`);
+              setBackendStatus(`hiba (${result.status})`);
+              return;
+            }
+          }
+
+          const experiences = Array.isArray(localProfileData[experienceStorageKey])
+            ? localProfileData[experienceStorageKey]
+            : [];
+
+          const clearResult = await backendRequest(getBackendExperiencesPath(profileUrl), {
+            method: 'DELETE',
+          });
+
+          if (!clearResult.ok && clearResult.status !== 404) {
+            setStatus(`Backend push hiba (${clearResult.status})`);
+            setBackendStatus(`hiba (${clearResult.status})`);
+            return;
+          }
+
+          for (const experience of experiences) {
+            if (typeof experience !== 'string' || experience.trim() === '') {
+              continue;
+            }
+
+            const result = await backendRequest(getBackendExperiencesPath(profileUrl), {
+              method: 'POST',
+              body: JSON.stringify({ value: experience }),
+            });
+
+            if (!result.ok) {
+              setStatus(`Backend push hiba (${result.status})`);
+              setBackendStatus(`hiba (${result.status})`);
+              return;
+            }
+          }
+
+          setStatus('Profil feltoltve backendbe');
+          setBackendStatus('kapcsolodva');
+        } catch (error) {
+          console.error('Backend push failed:', error);
+          setStatus('Backend push sikertelen');
+          setBackendStatus('nem elerheto');
+        }
+      })();
+    });
+  }
+
+  function checkBackendConnection() {
+    (async () => {
+      try {
+        const result = await backendRequest('/actuator/health', { method: 'GET' });
+        if (result.ok && result.data && result.data.status === 'UP') {
+          setBackendStatus('elerheto');
+          return;
+        }
+
+        setBackendStatus('nem valaszol');
+      } catch (_error) {
+        setBackendStatus('nem elerheto');
+      }
+    })();
+  }
+
   function saveSelection(fieldName, value) {
     const profileUrl = getStorageProfileUrl();
 
@@ -222,6 +442,7 @@
           fieldName === experienceFieldLabel ? 'Tapasztalat hozzaadva' : `${fieldName} elmentve`
         );
         setLastUpdatedDisplay(updatedProfileData[profileLastUpdatedKey]);
+        syncSelectionToBackend(profileUrl, fieldName, value);
         if (fieldName === experienceFieldLabel) {
           const experienceCount = Array.isArray(updatedProfileData[experienceStorageKey])
             ? updatedProfileData[experienceStorageKey].length
@@ -333,6 +554,14 @@
     });
   }
 
+  function createBackendPullButton() {
+    return createButton('Sync From Backend', syncCurrentProfileFromBackend);
+  }
+
+  function createBackendPushButton() {
+    return createButton('Sync To Backend', syncCurrentProfileToBackend);
+  }
+
     const buttonMap = {};
     const buttonStateMap = {};
 
@@ -433,6 +662,8 @@
 
   panel.appendChild(createExportButton());
   panel.appendChild(createImportButton());
+  panel.appendChild(createBackendPullButton());
+  panel.appendChild(createBackendPushButton());
 
   document.body.appendChild(panel);
   document.body.appendChild(importInput);
@@ -447,6 +678,7 @@
   });
 
     refreshPanelForCurrentProfile(true);
+    checkBackendConnection();
 
   if (supportsPopover()) {
     panel.setAttribute('popover', 'manual');

@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Chrome extension for LinkedIn that provides a floating panel to easily select and scrape page elements with instant text logging.",
   "permissions": ["storage"],
+  "host_permissions": ["http://localhost:8080/*", "http://127.0.0.1:8080/*"],
   "content_scripts": [
     {
       "matches": ["https://www.linkedin.com/*", "https://linkedin.com/*"],
