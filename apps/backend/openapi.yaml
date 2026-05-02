@@ -16,6 +16,8 @@ servers:
 tags:
   - name: profiles
     description: Per-profile data operations
+  - name: maintenance
+    description: One-shot maintenance and cleanup operations
   - name: export
     description: Full dataset export
 
@@ -217,6 +219,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AllProfiles"
+
+  /profiles/maintenance/canonicalize-urls:
+    post:
+      operationId: canonicalizeProfileUrls
+      summary: Canonicalize and merge stored profile URLs
+      description: >
+        One-shot maintenance operation that rewrites stored profile keys to
+        canonical profile URLs by removing query and fragment parts
+        (for example `?locale=de`). If multiple rows resolve to the same
+        canonical URL, data is merged into a single profile.
+      tags: [maintenance]
+      responses:
+        "200":
+          description: Cleanup summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scannedProfiles:
+                    type: integer
+                    minimum: 0
+                  canonicalProfiles:
+                    type: integer
+                    minimum: 0
+                  normalizedProfiles:
+                    type: integer
+                    minimum: 0
+                  mergedProfiles:
+                    type: integer
+                    minimum: 0
+              example:
+                scannedProfiles: 12
+                canonicalProfiles: 10
+                normalizedProfiles: 2
+                mergedProfiles: 2
 
 components:
 

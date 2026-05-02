@@ -3,14 +3,18 @@ package com.linkedinscraper.backend.profile.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
+import java.net.URI;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -142,6 +146,50 @@ public class ProfileStorageService {
     return deletedRows > 0;
   }
 
+  @Transactional
+  public UrlCleanupResult canonicalizeAndMergeProfileUrls() {
+    List<Map<String, Object>> rows =
+        jdbcTemplate.queryForList("SELECT profile_url, data_json FROM profiles ORDER BY profile_url");
+
+    if (rows.isEmpty()) {
+      return new UrlCleanupResult(0, 0, 0, 0);
+    }
+
+    int normalizedProfiles = 0;
+    int mergedProfiles = 0;
+    Map<String, Map<String, Object>> canonicalProfiles = new LinkedHashMap<>();
+
+    for (Map<String, Object> row : rows) {
+      String originalProfileUrl = (String) row.get("profile_url");
+      String canonicalProfileUrl = canonicalizeProfileUrl(originalProfileUrl);
+      if (!canonicalProfileUrl.equals(originalProfileUrl)) {
+        normalizedProfiles++;
+      }
+
+      Map<String, Object> incomingData = readJsonMap((String) row.get("data_json"));
+      Map<String, Object> existingData = canonicalProfiles.get(canonicalProfileUrl);
+      if (existingData == null) {
+        canonicalProfiles.put(canonicalProfileUrl, new HashMap<>(incomingData));
+      } else {
+        canonicalProfiles.put(canonicalProfileUrl, mergeProfileData(existingData, incomingData));
+        mergedProfiles++;
+      }
+    }
+
+    jdbcTemplate.update("DELETE FROM profiles");
+    for (Map.Entry<String, Map<String, Object>> entry : canonicalProfiles.entrySet()) {
+      Map<String, Object> mergedData = new HashMap<>(entry.getValue());
+      mergedData.put(LAST_UPDATED_KEY, resolveLastUpdated(entry.getValue(), Collections.emptyMap()));
+      upsertProfile(entry.getKey(), mergedData);
+    }
+
+    return new UrlCleanupResult(
+        rows.size(),
+        canonicalProfiles.size(),
+        normalizedProfiles,
+        mergedProfiles);
+  }
+
   private Map<String, Object> getOrCreateProfileData(String profileUrl) {
     return getProfile(profileUrl).orElseGet(HashMap::new);
   }
@@ -196,4 +244,127 @@ public class ProfileStorageService {
   private String nowIso() {
     return DateTimeFormatter.ISO_INSTANT.format(Instant.now());
   }
+
+  private String canonicalizeProfileUrl(String profileUrl) {
+    if (!(profileUrl.startsWith("http://") || profileUrl.startsWith("https://"))) {
+      return profileUrl;
+    }
+
+    try {
+      URI parsed = URI.create(profileUrl);
+      URI withoutQueryAndFragment =
+          new URI(parsed.getScheme(), parsed.getAuthority(), parsed.getPath(), null, null);
+      return withoutQueryAndFragment.toString();
+    } catch (RuntimeException | java.net.URISyntaxException ex) {
+      int queryIndex = profileUrl.indexOf('?');
+      int fragmentIndex = profileUrl.indexOf('#');
+      int cutIndex = profileUrl.length();
+      if (queryIndex >= 0) {
+        cutIndex = Math.min(cutIndex, queryIndex);
+      }
+      if (fragmentIndex >= 0) {
+        cutIndex = Math.min(cutIndex, fragmentIndex);
+      }
+      return profileUrl.substring(0, cutIndex);
+    }
+  }
+
+  private Map<String, Object> mergeProfileData(
+      Map<String, Object> existingData,
+      Map<String, Object> incomingData) {
+    Map<String, Object> mergedData = new HashMap<>(existingData);
+
+    for (Map.Entry<String, Object> entry : incomingData.entrySet()) {
+      String key = entry.getKey();
+      Object incomingValue = entry.getValue();
+
+      if (EXPERIENCE_KEY.equals(key)) {
+        List<String> mergedExperiences =
+            mergeExperiences(mergedData.get(EXPERIENCE_KEY), incomingValue);
+        mergedData.put(EXPERIENCE_KEY, mergedExperiences);
+        continue;
+      }
+
+      if (LAST_UPDATED_KEY.equals(key)) {
+        mergedData.put(LAST_UPDATED_KEY, resolveLastUpdated(mergedData, incomingData));
+        continue;
+      }
+
+      if (!mergedData.containsKey(key) || isBlankValue(mergedData.get(key))) {
+        mergedData.put(key, incomingValue);
+      }
+    }
+
+    mergedData.put(LAST_UPDATED_KEY, resolveLastUpdated(mergedData, incomingData));
+    return mergedData;
+  }
+
+  private List<String> mergeExperiences(Object existingValue, Object incomingValue) {
+    List<String> existingExperiences = readExperienceList(existingValue);
+    List<String> incomingExperiences = readExperienceList(incomingValue);
+
+    LinkedHashSet<String> merged = new LinkedHashSet<>();
+    for (String experience : existingExperiences) {
+      if (!experience.isBlank()) {
+        merged.add(experience);
+      }
+    }
+    for (String experience : incomingExperiences) {
+      if (!experience.isBlank()) {
+        merged.add(experience);
+      }
+    }
+    return new ArrayList<>(merged);
+  }
+
+  private String resolveLastUpdated(Map<String, Object> primary, Map<String, Object> secondary) {
+    String primaryValue = stringify(primary.get(LAST_UPDATED_KEY));
+    String secondaryValue = stringify(secondary.get(LAST_UPDATED_KEY));
+
+    Optional<Instant> primaryInstant = parseInstant(primaryValue);
+    Optional<Instant> secondaryInstant = parseInstant(secondaryValue);
+
+    if (primaryInstant.isPresent() && secondaryInstant.isPresent()) {
+      return secondaryInstant.get().isAfter(primaryInstant.get()) ? secondaryValue : primaryValue;
+    }
+    if (primaryInstant.isPresent()) {
+      return primaryValue;
+    }
+    if (secondaryInstant.isPresent()) {
+      return secondaryValue;
+    }
+
+    if (!primaryValue.isBlank()) {
+      return primaryValue;
+    }
+    if (!secondaryValue.isBlank()) {
+      return secondaryValue;
+    }
+    return nowIso();
+  }
+
+  private Optional<Instant> parseInstant(String value) {
+    if (value.isBlank()) {
+      return Optional.empty();
+    }
+    try {
+      return Optional.of(Instant.parse(value));
+    } catch (Exception ex) {
+      return Optional.empty();
+    }
+  }
+
+  private String stringify(Object value) {
+    return value == null ? "" : String.valueOf(value);
+  }
+
+  private boolean isBlankValue(Object value) {
+    return stringify(value).isBlank();
+  }
+
+  public record UrlCleanupResult(
+      int scannedProfiles,
+      int canonicalProfiles,
+      int normalizedProfiles,
+      int mergedProfiles) {}
 }

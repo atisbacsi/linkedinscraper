@@ -131,6 +131,11 @@ public class ProfileController {
         .body(storageService.listProfiles());
   }
 
+  @PostMapping("/profiles/maintenance/canonicalize-urls")
+  public ResponseEntity<Object> canonicalizeProfileUrls() {
+    return ResponseEntity.ok(storageService.canonicalizeAndMergeProfileUrls());
+  }
+
   private ResponseEntity<Object> notFound(String message) {
     return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", message));
   }
