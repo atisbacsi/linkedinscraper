@@ -5,6 +5,7 @@ import com.linkedinscraper.backend.profile.service.ProfileStorageService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -143,14 +144,42 @@ public class ProfileController {
     String decodedTwice = URLDecoder.decode(decodedOnce, StandardCharsets.UTF_8);
 
     if (looksLikeHttpUrl(decodedTwice)) {
-      return decodedTwice;
+      return stripQueryAndFragment(decodedTwice);
     }
 
-    return decodedOnce;
+    return stripQueryAndFragment(decodedOnce);
   }
 
   private boolean looksLikeHttpUrl(String value) {
     return value.startsWith("http://") || value.startsWith("https://");
+  }
+
+  private String stripQueryAndFragment(String value) {
+    if (!looksLikeHttpUrl(value)) {
+      return value;
+    }
+
+    try {
+      URI parsed = URI.create(value);
+      URI withoutQueryAndFragment = new URI(
+          parsed.getScheme(),
+          parsed.getAuthority(),
+          parsed.getPath(),
+          null,
+          null);
+      return withoutQueryAndFragment.toString();
+    } catch (RuntimeException | java.net.URISyntaxException ex) {
+      int queryIndex = value.indexOf('?');
+      int fragmentIndex = value.indexOf('#');
+      int cutIndex = value.length();
+      if (queryIndex >= 0) {
+        cutIndex = Math.min(cutIndex, queryIndex);
+      }
+      if (fragmentIndex >= 0) {
+        cutIndex = Math.min(cutIndex, fragmentIndex);
+      }
+      return value.substring(0, cutIndex);
+    }
   }
 
   public record FieldValueRequest(@NotBlank String value) {}
