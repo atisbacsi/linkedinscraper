@@ -19,6 +19,41 @@ This module contains the Spring Boot backend for the LinkedIn scraper plugin.
 ./mvnw -pl apps/backend -Pnative -DskipTests native:compile
 ```
 
+## Build
+
+Run these commands from the repository root:
+
+```bash
+# Compile + run tests for backend module
+./mvnw -pl apps/backend clean test
+
+# Build executable Spring Boot jar
+./mvnw -pl apps/backend -DskipTests package
+
+# Optional: native binary build (requires GraalVM native-image toolchain)
+./mvnw -pl apps/backend -Pnative -DskipTests native:compile
+```
+
+## Docker Image
+
+Build the backend image (multi-stage Dockerfile in this module):
+
+```bash
+docker build -f apps/backend/Dockerfile -t linkedin-scraper-backend:local apps/backend
+```
+
+Run the image on port `8080` and persist SQLite data to the repository `data` directory:
+
+```bash
+docker run --rm -p 8080:8080 -v "$(pwd)/data:/data" linkedin-scraper-backend:local
+```
+
+Alternative with Docker Compose from repository root:
+
+```bash
+docker compose up --build backend
+```
+
 ## Runtime Notes
 
 - Default port: `8080`

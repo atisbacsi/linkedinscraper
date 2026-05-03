@@ -42,6 +42,13 @@ Docker Compose (multi-stage GraalVM native build):
 docker compose up --build backend
 ```
 
+Direct Docker image build and run (without Compose):
+
+```bash
+docker build -f apps/backend/Dockerfile -t linkedin-scraper-backend:local apps/backend
+docker run --rm -p 8080:8080 -v "$(pwd)/data:/data" linkedin-scraper-backend:local
+```
+
 The backend runs on `http://localhost:8080` with Swagger UI at `/swagger-ui.html` and health check at `/actuator/health`.
 
 SQLite database file is stored in `./data/linkedin-scraper.sqlite` when using Docker Compose.
