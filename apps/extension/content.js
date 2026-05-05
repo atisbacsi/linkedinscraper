@@ -295,10 +295,12 @@
   function getStorageProfileUrl() {
     const url = new URL(globalThis.location.href);
 
+    // Always use a canonical profile key so locale/query variants share the same storage entry.
+    url.search = '';
+    url.hash = '';
+
     if (url.pathname.endsWith('/overlay/contact-info/')) {
       url.pathname = url.pathname.replace(/\/overlay\/contact-info\/$/, '/');
-      url.search = '';
-      url.hash = '';
     }
 
     return url.toString();
