@@ -117,12 +117,14 @@ The import is intentionally simple:
 
 ## Backend Connection
 
-Default backend URL in the content script is `http://localhost:8080`.
+Default backend URL is `http://localhost:8080`, but it is configurable directly in the panel UI (`Backend URL` input + `Save` button).
+
+After saving a new URL, the extension stores it in `chrome.storage.local` and uses it for all backend operations (health check, sync pull/push, auto-save sync).
 
 The extension requires host permissions for:
 
-- `http://localhost:8080/*`
-- `http://127.0.0.1:8080/*`
+- `http://*/*`
+- `https://*/*`
 
 For profile URL path parameters, the current backend contract uses double URL-encoding.
 

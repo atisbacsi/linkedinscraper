@@ -57,6 +57,45 @@
   backendInfo.style.fontSize = '12px';
   panel.appendChild(backendInfo);
 
+  const backendUrlLabel = document.createElement('div');
+  backendUrlLabel.textContent = 'Backend URL';
+  backendUrlLabel.style.color = '#94a3b8';
+  backendUrlLabel.style.fontSize = '12px';
+  panel.appendChild(backendUrlLabel);
+
+  const backendUrlInputRow = document.createElement('div');
+  backendUrlInputRow.style.display = 'flex';
+  backendUrlInputRow.style.gap = '6px';
+  backendUrlInputRow.style.alignItems = 'center';
+
+  const backendUrlInput = document.createElement('input');
+  backendUrlInput.type = 'text';
+  backendUrlInput.placeholder = 'http://localhost:8080';
+  backendUrlInput.style.flex = '1';
+  backendUrlInput.style.minWidth = '0';
+  backendUrlInput.style.border = '1px solid rgba(148, 163, 184, 0.4)';
+  backendUrlInput.style.borderRadius = '8px';
+  backendUrlInput.style.padding = '6px 8px';
+  backendUrlInput.style.background = 'rgba(30, 41, 59, 0.9)';
+  backendUrlInput.style.color = '#e2e8f0';
+  backendUrlInput.style.fontSize = '12px';
+
+  const backendUrlSaveButton = document.createElement('button');
+  backendUrlSaveButton.type = 'button';
+  backendUrlSaveButton.textContent = 'Save';
+  backendUrlSaveButton.style.border = 'none';
+  backendUrlSaveButton.style.borderRadius = '8px';
+  backendUrlSaveButton.style.padding = '6px 10px';
+  backendUrlSaveButton.style.background = '#bae6fd';
+  backendUrlSaveButton.style.color = '#0c4a6e';
+  backendUrlSaveButton.style.fontSize = '12px';
+  backendUrlSaveButton.style.fontWeight = '600';
+  backendUrlSaveButton.style.cursor = 'pointer';
+
+  backendUrlInputRow.appendChild(backendUrlInput);
+  backendUrlInputRow.appendChild(backendUrlSaveButton);
+  panel.appendChild(backendUrlInputRow);
+
   const highlightStyle = document.createElement('style');
   highlightStyle.textContent = `
     .floating-selector-hover {
@@ -76,6 +115,8 @@
   let promoteTimer = null;
   let profileRefreshIntervalId = null;
   let lastSyncedProfileUrl = '';
+  const backendBaseUrlStorageKey = '__backendBaseUrl';
+  const defaultBackendBaseUrl = 'http://localhost:8080';
   const profileStorageCleanupFlagKey = '__profileStorageCanonicalCleanupDoneV1';
   const profileLastUpdatedKey = 'LastUpdatedAt';
   const experienceFieldLabel = 'Add Experience';
@@ -108,7 +149,7 @@
     [experienceFieldLabel]: '7',
   };
   let hotkeyHintsVisible = false;
-  const backendBaseUrl = 'http://localhost:8080';
+  let backendBaseUrl = defaultBackendBaseUrl;
   const backendRequestTimeoutMs = 6000;
 
   function supportsPopover() {
@@ -256,6 +297,95 @@
       }
       throw error;
     }
+  }
+
+  function normalizeBackendBaseUrl(rawValue) {
+    const input = String(rawValue || '').trim();
+    if (!input) {
+      return null;
+    }
+
+    try {
+      const url = new URL(input);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        return null;
+      }
+
+      url.search = '';
+      url.hash = '';
+
+      const normalized = url.toString();
+      return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function getPreservedStorageMeta(existingData) {
+    const preserved = {};
+
+    if (Object.prototype.hasOwnProperty.call(existingData, backendBaseUrlStorageKey)) {
+      preserved[backendBaseUrlStorageKey] = existingData[backendBaseUrlStorageKey];
+    }
+
+    if (Object.prototype.hasOwnProperty.call(existingData, profileStorageCleanupFlagKey)) {
+      preserved[profileStorageCleanupFlagKey] = existingData[profileStorageCleanupFlagKey];
+    }
+
+    return preserved;
+  }
+
+  function replaceStorageWithProfiles(nextProfileData, successMessage) {
+    safeStorageGet(null, (existingData) => {
+      const replacementStore = {
+        ...getPreservedStorageMeta(existingData),
+        ...(nextProfileData || {}),
+      };
+
+      safeStorageClear(() => {
+        safeStorageSet(replacementStore, () => {
+          if (successMessage) {
+            setStatus(successMessage);
+          }
+          refreshPanelForCurrentProfile(true);
+          checkBackendConnection();
+        });
+      });
+    });
+  }
+
+  function saveBackendBaseUrlFromInput() {
+    const normalized = normalizeBackendBaseUrl(backendUrlInput.value);
+    if (!normalized) {
+      setStatus('Ervenytelen Backend URL (http/https)');
+      return;
+    }
+
+    backendBaseUrl = normalized;
+    backendUrlInput.value = normalized;
+
+    safeStorageSet({ [backendBaseUrlStorageKey]: normalized }, () => {
+      setStatus(`Backend URL mentve: ${normalized}`);
+      checkBackendConnection();
+    });
+  }
+
+  function loadBackendBaseUrlConfig(onDone) {
+    safeStorageGet([backendBaseUrlStorageKey], (result) => {
+      const storedValue = result[backendBaseUrlStorageKey];
+      const normalized = normalizeBackendBaseUrl(storedValue);
+
+      if (normalized) {
+        backendBaseUrl = normalized;
+      } else {
+        backendBaseUrl = defaultBackendBaseUrl;
+      }
+
+      backendUrlInput.value = backendBaseUrl;
+      if (onDone) {
+        onDone();
+      }
+    });
   }
 
   function formatLastUpdated(timestamp) {
@@ -593,15 +723,10 @@
         }
 
         const backendData = result.data;
-        const profileCount = Object.keys(backendData).length;
+        const profileCount = Object.keys(backendData).filter((key) => isProfileStorageKey(key)).length;
 
-        safeStorageClear(() => {
-          safeStorageSet(backendData, () => {
-            setStatus(`Teljes backend letoltve (${profileCount} profil)`);
-            setBackendStatus('kapcsolodva');
-            refreshPanelForCurrentProfile(true);
-          });
-        });
+        replaceStorageWithProfiles(backendData, `Teljes backend letoltve (${profileCount} profil)`);
+        setBackendStatus('kapcsolodva');
       } catch (error) {
         console.error('Backend full fetch failed:', error);
         setStatus('Backend eleres sikertelen');
@@ -757,14 +882,27 @@
   }
 
   function replaceStorageData(parsedData) {
-    safeStorageClear(() => {
-      safeStorageSet(parsedData, () => {
-        console.log('Imported storage data:', parsedData);
-        setStatus('JSON import kesz');
-        refreshPanelForCurrentProfile(true);
-        checkBackendConnection();
-      });
-    });
+    replaceStorageWithProfiles(parsedData, 'JSON import kesz');
+    console.log('Imported storage data:', parsedData);
+  }
+
+  function normalizeImportedStorage(parsedData) {
+    if (!parsedData || typeof parsedData !== 'object' || Array.isArray(parsedData)) {
+      return {};
+    }
+
+    const normalized = { ...parsedData };
+    const importedBackendUrl = normalizeBackendBaseUrl(parsedData[backendBaseUrlStorageKey]);
+
+    if (importedBackendUrl) {
+      normalized[backendBaseUrlStorageKey] = importedBackendUrl;
+      backendBaseUrl = importedBackendUrl;
+      backendUrlInput.value = importedBackendUrl;
+    } else {
+      delete normalized[backendBaseUrlStorageKey];
+    }
+
+    return normalized;
   }
 
   function importStorageFromJson(file) {
@@ -772,7 +910,8 @@
       .text()
       .then((text) => {
         const parsedData = JSON.parse(text);
-        replaceStorageData(parsedData);
+        const normalizedData = normalizeImportedStorage(parsedData);
+        replaceStorageData(normalizedData);
       })
       .catch((error) => {
         console.error('JSON import failed:', error);
@@ -825,6 +964,20 @@
   function createBackendPushButton() {
     return createButton('Sync To Backend', syncCurrentProfileToBackend);
   }
+
+  backendUrlSaveButton.addEventListener('click', () => {
+    saveBackendBaseUrlFromInput();
+  });
+
+  backendUrlInput.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    saveBackendBaseUrlFromInput();
+  });
 
     const buttonMap = {};
     const buttonStateMap = {};
@@ -949,8 +1102,10 @@
   });
 
     runOneTimeStorageCleanup(() => {
-      refreshPanelForCurrentProfile(true);
-      checkBackendConnection();
+      loadBackendBaseUrlConfig(() => {
+        refreshPanelForCurrentProfile(true);
+        checkBackendConnection();
+      });
     });
 
   if (supportsPopover()) {
