@@ -76,6 +76,7 @@
   let promoteTimer = null;
   let profileRefreshIntervalId = null;
   let lastSyncedProfileUrl = '';
+  const profileStorageCleanupFlagKey = '__profileStorageCanonicalCleanupDoneV1';
   const profileLastUpdatedKey = 'LastUpdatedAt';
   const experienceFieldLabel = 'Add Experience';
   const experienceStorageKey = 'Experiences';
@@ -304,6 +305,155 @@
     }
 
     return url.toString();
+  }
+
+  function isProfileStorageKey(key) {
+    return typeof key === 'string' && (key.startsWith('http://') || key.startsWith('https://'));
+  }
+
+  function canonicalizeProfileStorageUrl(rawUrl) {
+    try {
+      const url = new URL(rawUrl);
+      url.search = '';
+      url.hash = '';
+
+      if (url.pathname.endsWith('/overlay/contact-info/')) {
+        url.pathname = url.pathname.replace(/\/overlay\/contact-info\/$/, '/');
+      }
+
+      return url.toString();
+    } catch (_error) {
+      const queryIndex = rawUrl.indexOf('?');
+      const fragmentIndex = rawUrl.indexOf('#');
+      let cutIndex = rawUrl.length;
+
+      if (queryIndex >= 0) {
+        cutIndex = Math.min(cutIndex, queryIndex);
+      }
+      if (fragmentIndex >= 0) {
+        cutIndex = Math.min(cutIndex, fragmentIndex);
+      }
+
+      return rawUrl.slice(0, cutIndex);
+    }
+  }
+
+  function isBlankValue(value) {
+    return value === undefined || value === null || String(value).trim() === '';
+  }
+
+  function parseTimestamp(value) {
+    if (isBlankValue(value)) {
+      return null;
+    }
+
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function mergeProfileStorageData(baseProfile, incomingProfile) {
+    const merged = { ...baseProfile };
+
+    for (const [key, incomingValue] of Object.entries(incomingProfile || {})) {
+      if (key === experienceStorageKey) {
+        const existing = Array.isArray(merged[experienceStorageKey])
+          ? merged[experienceStorageKey]
+          : [];
+        const incoming = Array.isArray(incomingValue) ? incomingValue : [];
+        const unique = [];
+        const seen = new Set();
+
+        for (const item of existing.concat(incoming)) {
+          const normalized = String(item || '').trim();
+          if (!normalized || seen.has(normalized)) {
+            continue;
+          }
+          seen.add(normalized);
+          unique.push(normalized);
+        }
+
+        merged[experienceStorageKey] = unique;
+        continue;
+      }
+
+      if (key === profileLastUpdatedKey) {
+        const currentDate = parseTimestamp(merged[profileLastUpdatedKey]);
+        const incomingDate = parseTimestamp(incomingValue);
+
+        if (!currentDate && incomingDate) {
+          merged[profileLastUpdatedKey] = incomingValue;
+        } else if (currentDate && incomingDate && incomingDate > currentDate) {
+          merged[profileLastUpdatedKey] = incomingValue;
+        }
+        continue;
+      }
+
+      if (!Object.prototype.hasOwnProperty.call(merged, key) || isBlankValue(merged[key])) {
+        merged[key] = incomingValue;
+      }
+    }
+
+    return merged;
+  }
+
+  function runOneTimeStorageCleanup(onDone) {
+    safeStorageGet(null, (allData) => {
+      if (allData[profileStorageCleanupFlagKey]) {
+        if (onDone) {
+          onDone();
+        }
+        return;
+      }
+
+      const nextStore = {};
+      const mergedProfiles = {};
+
+      let scannedProfiles = 0;
+      let normalizedProfiles = 0;
+
+      for (const [key, value] of Object.entries(allData || {})) {
+        if (!isProfileStorageKey(key) || !value || typeof value !== 'object' || Array.isArray(value)) {
+          nextStore[key] = value;
+          continue;
+        }
+
+        scannedProfiles += 1;
+        const canonicalKey = canonicalizeProfileStorageUrl(key);
+        if (canonicalKey !== key) {
+          normalizedProfiles += 1;
+        }
+
+        if (!mergedProfiles[canonicalKey]) {
+          mergedProfiles[canonicalKey] = { ...value };
+        } else {
+          mergedProfiles[canonicalKey] = mergeProfileStorageData(mergedProfiles[canonicalKey], value);
+        }
+      }
+
+      const canonicalKeys = Object.keys(mergedProfiles);
+      for (const canonicalKey of canonicalKeys) {
+        nextStore[canonicalKey] = mergedProfiles[canonicalKey];
+      }
+
+      nextStore[profileStorageCleanupFlagKey] = true;
+
+      const mergedDuplicates = scannedProfiles - canonicalKeys.length;
+
+      safeStorageClear(() => {
+        safeStorageSet(nextStore, () => {
+          console.log('Storage canonical cleanup completed once.', {
+            scannedProfiles,
+            canonicalProfiles: canonicalKeys.length,
+            normalizedProfiles,
+            mergedProfiles: mergedDuplicates,
+          });
+
+          if (onDone) {
+            onDone();
+          }
+        });
+      });
+    });
   }
 
   function getEncodedProfileUrl(profileUrl) {
@@ -798,8 +948,10 @@
     importStorageFromJson(file);
   });
 
-    refreshPanelForCurrentProfile(true);
-    checkBackendConnection();
+    runOneTimeStorageCleanup(() => {
+      refreshPanelForCurrentProfile(true);
+      checkBackendConnection();
+    });
 
   if (supportsPopover()) {
     panel.setAttribute('popover', 'manual');
