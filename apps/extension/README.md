@@ -20,6 +20,7 @@ Selected values are stored in `chrome.storage.local`, grouped by profile URL, an
 - Full JSON import that replaces existing storage content
 - Automatic backend sync on field save
 - Manual full-collection sync buttons (pull from backend / push to backend)
+- Known profile link markers across LinkedIn pages (green checkmark next to links already stored in backend)
 
 ## Captured Fields
 
@@ -56,6 +57,12 @@ Example:
 
 - source page: `https://www.linkedin.com/in/example/overlay/contact-info/`
 - storage key: `https://www.linkedin.com/in/example/`
+
+## Known Profile Link Markers
+
+The extension also runs a lightweight marker script on LinkedIn pages (`https://linkedin.com/*` and `https://www.linkedin.com/*`).
+
+It fetches the stored profile URL list from backend (`GET /profiles`) and marks matching profile links on the page with a green checkmark (`✓`) appended after the link text.
 
 ## Keyboard Shortcuts
 

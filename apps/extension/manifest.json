@@ -10,6 +10,11 @@
       "matches": ["https://www.linkedin.com/in/*", "https://linkedin.com/in/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.linkedin.com/*", "https://linkedin.com/*"],
+      "js": ["link-marker.js"],
+      "run_at": "document_idle"
     }
   ]
 }
