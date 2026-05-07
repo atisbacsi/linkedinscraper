@@ -6,7 +6,7 @@ Selected values are stored in `chrome.storage.local`, grouped by profile URL, an
 
 ## Features
 
-- Active only on `linkedin.com`
+- Active only on LinkedIn profile URLs (`https://linkedin.com/in/*` and `https://www.linkedin.com/in/*`)
 - Right-side floating control panel
 - Click-to-select extraction from LinkedIn profile pages
 - Keyboard shortcuts for fast field selection
