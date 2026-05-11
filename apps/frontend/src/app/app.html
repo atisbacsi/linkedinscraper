@@ -1,0 +1,43 @@
+<main class="page">
+  <mat-card class="contacts-card" appearance="outlined">
+    <h1>Scraped Kontaktok</h1>
+    <p class="subtitle">Backend forras: /profiles</p>
+
+    @if (loading) {
+      <div class="state-wrap">
+        <mat-spinner diameter="40"></mat-spinner>
+      </div>
+    } @else if (error) {
+      <p class="state-error">{{ error }}</p>
+    } @else if (contacts.length === 0) {
+      <p class="state-empty">Nincs megjelenitheto kontakt.</p>
+    } @else {
+      <div class="table-wrap">
+        <table mat-table [dataSource]="contacts" class="contacts-table">
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef>Nev</th>
+            <td mat-cell *matCellDef="let contact">{{ contact.name }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="location">
+            <th mat-header-cell *matHeaderCellDef>Location</th>
+            <td mat-cell *matCellDef="let contact">{{ contact.location }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="numOfContacts">
+            <th mat-header-cell *matHeaderCellDef>Num Of Contacts</th>
+            <td mat-cell *matCellDef="let contact">{{ contact.numOfContacts }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="info">
+            <th mat-header-cell *matHeaderCellDef>Info</th>
+            <td mat-cell *matCellDef="let contact" class="info-cell">{{ contact.info }}</td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+      </div>
+    }
+  </mat-card>
+</main>

@@ -1,11 +1,12 @@
 # LinkedIn Scraper Monorepo
 
-This repository contains the LinkedIn scraper Chrome extension and a Spring Boot backend service in a single monorepo.
+This repository contains the LinkedIn scraper Chrome extension, a Spring Boot backend service, and an Angular frontend service in a single monorepo.
 
 ## Structure
 
 - `apps/extension` - Manifest V3 Chrome extension for collecting LinkedIn profile fragments
 - `apps/backend` - Spring Boot backend prepared for Docker, GraalVM, and SQLite
+- `apps/frontend` - Angular + Material frontend for listing scraped contacts from backend
 - `data` - local runtime directory for SQLite files when the backend runs in Docker Compose
 
 ## Backend Stack
@@ -52,6 +53,16 @@ docker run --rm -p 8080:8080 -v "$(pwd)/data:/data" linkedin-scraper-backend:loc
 The backend runs on `http://localhost:8080` with Swagger UI at `/swagger-ui.html` and health check at `/actuator/health`.
 
 SQLite database file is stored in `./data/linkedin-scraper.sqlite` when using Docker Compose.
+
+### Frontend
+
+```bash
+cd apps/frontend
+npm install
+npm start
+```
+
+Frontend runs on `http://localhost:4200` and reads contacts from backend `GET /profiles`.
 
 ## Current Status
 

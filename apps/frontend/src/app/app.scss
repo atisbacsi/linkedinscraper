@@ -1,0 +1,49 @@
+.page {
+	min-height: 100vh;
+	padding: 24px;
+	background: #f5f7fb;
+}
+
+.contacts-card {
+	margin: 0 auto;
+	max-width: 1200px;
+	padding: 16px;
+}
+
+h1 {
+	margin: 0 0 4px;
+	font-size: 1.6rem;
+}
+
+.subtitle {
+	margin: 0 0 16px;
+	color: #5f6368;
+}
+
+.table-wrap {
+	width: 100%;
+	overflow-x: auto;
+}
+
+.contacts-table {
+	width: 100%;
+}
+
+.info-cell {
+	white-space: pre-wrap;
+	line-height: 1.4;
+}
+
+.state-wrap {
+	display: flex;
+	justify-content: center;
+	padding: 24px 0;
+}
+
+.state-error {
+	color: #b00020;
+}
+
+.state-empty {
+	color: #5f6368;
+}
